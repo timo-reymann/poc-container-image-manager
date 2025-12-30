@@ -77,7 +77,7 @@ uv run image-manager stop              # Stop all
 
 **buildkitd** (for building):
 - **Linux**: Runs natively using the bundled binary
-- **macOS**: Runs in a Docker container (`moby/buildkit`)
+- **macOS**: Runs rootless in a Docker container (`moby/buildkit:rootless`)
 
 **registry** (for base image resolution):
 - Local registry container (`registry:2`) on port 5050
@@ -85,13 +85,47 @@ uv run image-manager stop              # Stop all
 - Dependent images pull their base from the registry (no host Docker dependency)
 
 **dind** (for testing):
-- Runs Docker-in-Docker container (`docker:dind`)
+- **Linux**: Runs with minimal capabilities (`SYS_ADMIN`, `NET_ADMIN`, `MKNOD`)
+- **macOS**: Runs in Docker Desktop (requires privileged due to VM cgroup limitations)
 - Images are loaded from tar archives into the isolated daemon
 
 **garage** (for build caching):
 - S3-compatible storage container (`dxflrs/garage`) on port 3900
 - Provides build layer caching for BuildKit
 - Automatically used during builds (disable with `--no-cache`)
+
+### Production considerations
+
+The local containerized registry and S3 cache are for development/PoC purposes. In production:
+
+**Registry** → External container registry (e.g., Harbor, ECR, GCR, Docker Hub)
+- Configure via registry endpoint and credentials
+- Base images pushed to and pulled from shared registry
+
+**S3 Cache** → External S3-compatible storage (e.g., AWS S3, MinIO, Cloudflare R2)
+- Same cache bucket used locally and in CI for shared layer caching
+- Local builds benefit from CI-cached layers and vice versa
+- Significantly speeds up both local iteration and CI pipelines
+
+```
+┌─────────────┐     ┌─────────────┐
+│   Local     │     │     CI      │
+│   Build     │     │   Pipeline  │
+└──────┬──────┘     └──────┬──────┘
+       │                   │
+       └───────┬───────────┘
+               ▼
+       ┌───────────────┐
+       │   S3 Cache    │  ← Shared layer cache
+       │  (external)   │
+       └───────────────┘
+               │
+               ▼
+       ┌───────────────┐
+       │   Registry    │  ← Final images
+       │  (external)   │
+       └───────────────┘
+```
 
 ## Features
 
@@ -105,8 +139,9 @@ uv run image-manager stop              # Stop all
 
 ## Missing features
 
-- Specify registry
-- CI Generation or directly building images
+- Configurable external registry endpoint and credentials
+- Configurable external S3 endpoint and credentials
+- CI pipeline generation (GitHub Actions, GitLab CI, etc.)
 - More intelligent version parsing and sorting (potentially via strategy that can be specified)
 
 ## Implementation

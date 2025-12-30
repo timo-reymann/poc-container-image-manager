@@ -102,3 +102,107 @@ Variants automatically get aliases with suffix:
 ModelResolver calls `generate_semver_aliases()` after building tags.
 Aliases are stored in `Image.aliases` and `Variant.aliases` dicts.
 
+## Build Infrastructure
+
+### Container Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Host Machine                             │
+│                                                              │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐       │
+│  │  buildkitd   │  │   registry   │  │    garage    │       │
+│  │  (rootless)  │  │  (registry:2)│  │   (S3 cache) │       │
+│  │  :8372       │  │  :5050       │  │   :3900      │       │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘       │
+│         │                 │                 │                │
+│         └────────────┬────┴─────────────────┘                │
+│                      │                                       │
+│              ┌───────▼───────┐                              │
+│              │    buildctl   │                              │
+│              │  (local bin)  │                              │
+│              └───────────────┘                              │
+│                                                              │
+│  ┌──────────────┐                                           │
+│  │     dind     │  ← Testing only                           │
+│  │  (isolated)  │                                           │
+│  │  :2375       │                                           │
+│  └──────────────┘                                           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### buildkitd (`manager/building.py`)
+
+Handles container image builds using BuildKit:
+
+- **Linux**: Runs natively using bundled `buildkitd` binary
+- **macOS**: Runs rootless in Docker container (`moby/buildkit:rootless`)
+  - Uses `--oci-worker-no-process-sandbox` flag
+  - No privileged mode required
+  - Security options: `seccomp=unconfined`, `apparmor=unconfined`
+
+Key functions:
+- `start_buildkitd()` - Starts daemon (native or container)
+- `run_build()` - Executes buildctl with S3 cache support
+- `rewrite_dockerfile_for_registry()` - Rewrites FROM lines for local base images
+
+### Registry (`manager/building.py`)
+
+Local registry for base image resolution between builds:
+
+- Container: `registry:2` on port 5050
+- Built images are pushed via `crane push`
+- Dependent images pull bases from `host.docker.internal:5050` (macOS) or `localhost:5050` (Linux)
+- Configured as insecure in buildkitd for HTTP access
+
+### Garage S3 Cache (`manager/building.py`)
+
+S3-compatible storage for BuildKit layer caching:
+
+- Container: `dxflrs/garage:v2.1.0` on port 3900
+- Single-node setup with automatic initialization
+- Credentials stored in `.buildkit/garage/credentials.json`
+- Cache shared by image name (not tag) for better reuse
+
+Initialization flow:
+1. Start container with generated config
+2. Assign node role and apply layout
+3. Create bucket `buildkit-cache`
+4. Create access key and save credentials
+5. Grant bucket permissions
+
+### dind (`manager/testing.py`)
+
+Docker-in-Docker for isolated test execution:
+
+- **Linux**: Minimal capabilities (`SYS_ADMIN`, `NET_ADMIN`, `MKNOD`)
+- **macOS**: Privileged mode (required due to Docker Desktop VM cgroup limitations)
+
+Test flow:
+1. Load image tar into dind daemon
+2. Run `container-structure-test` against dind
+3. Tests execute in isolated environment
+
+## Build Flow
+
+```
+1. Generate     images/*.yml → dist/<name>/<tag>/Dockerfile
+                            → dist/<name>/<tag>/test.yml
+
+2. Build        Dockerfile → buildctl → image.tar
+                          ↓
+                    S3 cache (import/export)
+                          ↓
+                    Push to registry
+
+3. Test         image.tar → dind load → container-structure-test
+```
+
+## Dependency Resolution
+
+Images are sorted topologically based on FROM dependencies:
+
+1. `extract_dependencies()` - Parses Dockerfiles for FROM lines
+2. `sort_images()` - Topological sort using Kahn's algorithm
+3. Build order ensures base images exist before dependents
+
