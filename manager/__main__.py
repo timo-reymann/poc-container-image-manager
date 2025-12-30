@@ -6,7 +6,7 @@ from pathlib import Path
 
 from manager.config import ConfigLoader
 from manager.models import ModelResolver
-from manager.rendering import RenderContext, render_dockerfile, render_test_config
+from manager.rendering import RenderContext, render_dockerfile, render_test_config, generate_image_report
 from manager.dependency_graph import sort_images, extract_dependencies, CyclicDependencyError
 
 
@@ -163,6 +163,10 @@ def cmd_generate(args: list[str]) -> int:
             for alias, tag_name in variant.aliases.items():
                 alias_out_path = image_out_path.joinpath(alias)
                 alias_out_path.write_text(tag_name)
+
+    # Generate image catalog report
+    report_path = generate_image_report(sorted_images, snapshot_id)
+    print(f"Image catalog: {report_path}")
 
     return 0
 
