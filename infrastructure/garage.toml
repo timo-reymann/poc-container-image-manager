@@ -4,7 +4,6 @@ db_engine = "lmdb"
 replication_factor = 1
 consistency_mode = "consistent"
 
-[rpc]
 rpc_bind_addr = "[::]:3901"
 rpc_public_addr = "127.0.0.1:3901"
 rpc_secret = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"

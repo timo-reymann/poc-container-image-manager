@@ -34,9 +34,9 @@ GARAGE_RPC_PORT = 3901
 GARAGE_ADMIN_PORT = 3903
 GARAGE_BUCKET = "buildkit-cache"
 GARAGE_REGION = "garage"
-# Fixed credentials matching infrastructure/garage-init.sh
-GARAGE_ACCESS_KEY_ID = "GKbuildkit00000000000000000000000"
-GARAGE_SECRET_KEY = "buildkitsecret000000000000000000000000000000"
+# Fixed credentials matching infrastructure/garage-init.sh (must be valid hex)
+GARAGE_ACCESS_KEY_ID = "GK31337cafe000000000000000"
+GARAGE_SECRET_KEY = "1337cafe0000000000000000000000000000000000000000000000000000dead"
 
 # Platform support
 SUPPORTED_PLATFORMS = ["linux/amd64", "linux/arm64"]

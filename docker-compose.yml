@@ -10,19 +10,20 @@ services:
       - garage-data:/var/lib/garage/data
       - ./infrastructure/garage.toml:/etc/garage.toml:ro
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:3903/health"]
+      test: ["CMD", "/garage", "status"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
+      start_period: 10s
 
   garage-init:
-    image: curlimages/curl:latest
+    image: alpine:latest
     depends_on:
       garage:
         condition: service_healthy
     volumes:
       - ./infrastructure/garage-init.sh:/init.sh:ro
-    entrypoint: ["/bin/sh", "/init.sh"]
+    entrypoint: ["/bin/sh", "-c", "apk add --no-cache curl jq && /bin/sh /init.sh"]
     restart: "no"
 
   registry:
