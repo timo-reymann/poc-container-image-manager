@@ -1022,6 +1022,82 @@ def run_build_platform(
     return result.returncode
 
 
+def create_multiplatform_manifest(
+    image_ref: str,
+    platforms: list[str],
+    snapshot_id: str | None = None,
+) -> int:
+    """Create a multi-platform manifest from platform-specific images.
+
+    Uses crane to create an OCI index combining all platform images.
+
+    Args:
+        image_ref: Base image reference (e.g., 'base:2025.09')
+        platforms: List of platforms that were built
+        snapshot_id: Optional snapshot identifier
+
+    Returns:
+        Exit code (0 for success)
+    """
+    crane = get_crane_path()
+    registry = get_registry_addr()
+
+    # Output path for multi-platform manifest
+    if ":" not in image_ref:
+        raise ValueError(f"Invalid image reference '{image_ref}'")
+
+    name, tag = image_ref.split(":", 1)
+    manifest_tar = Path("dist") / name / tag / "image.tar"
+
+    # Build list of platform image references in registry
+    platform_refs = []
+    for plat in platforms:
+        platform_path = platform_to_path(plat)
+        if snapshot_id:
+            ref = f"{registry}/{image_ref}-{snapshot_id}-{platform_path}"
+        else:
+            ref = f"{registry}/{image_ref}-{platform_path}"
+        platform_refs.append(ref)
+
+    # Create manifest using crane index append
+    manifest_ref = f"{registry}/{image_ref}"
+    if snapshot_id:
+        manifest_ref = f"{registry}/{image_ref}-{snapshot_id}"
+
+    print(f"Creating multi-platform manifest: {manifest_ref}")
+
+    # Use crane to create index
+    cmd = [
+        str(crane), "index", "append",
+        "--insecure",
+        "-t", manifest_ref,
+    ]
+    for ref in platform_refs:
+        cmd.extend(["-m", ref])
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    if result.returncode != 0:
+        print(f"Failed to create manifest: {result.stderr}", file=sys.stderr)
+        return result.returncode
+
+    print(f"Multi-platform manifest pushed: {manifest_ref}")
+
+    # Export manifest to tar
+    export_cmd = [
+        str(crane), "pull", "--insecure",
+        manifest_ref, str(manifest_tar),
+    ]
+
+    export_result = subprocess.run(export_cmd, capture_output=True, text=True)
+    if export_result.returncode == 0:
+        print(f"Multi-platform image saved to: {manifest_tar}")
+    else:
+        print(f"Warning: Could not export manifest to tar: {export_result.stderr}", file=sys.stderr)
+
+    return 0
+
+
 def run_build(
     image_ref: str,
     context_path: Path | None = None,
