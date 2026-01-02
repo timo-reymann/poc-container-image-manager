@@ -1,6 +1,7 @@
 {% for platform in platforms %}
   build-{{ image.name }}-{{ platform }}:
     runs-on: ubuntu-latest
+    container: registry.example.com/ci/image-manager:latest
 {%- if image.dependencies %}
     needs:
 {%- for dep in image.dependencies %}
@@ -9,8 +10,6 @@
 {%- endif %}
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-      - run: uv sync
-      - run: uv run image-manager build {{ image.name }} --platform {{ platform }} --snapshot-id "$SNAPSHOT_ID"
-      - run: uv run image-manager sbom {{ image.name }} --platform {{ platform }} --snapshot-id "$SNAPSHOT_ID"
+      - run: image-manager build {{ image.name }} --platform {{ platform }} --snapshot-id "$SNAPSHOT_ID"
+      - run: image-manager sbom {{ image.name }} --platform {{ platform }} --snapshot-id "$SNAPSHOT_ID"
 {% endfor %}

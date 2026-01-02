@@ -1,9 +1,8 @@
   test-{{ image.name }}:
     runs-on: ubuntu-latest
+    container: registry.example.com/ci/image-manager:latest
     needs:
       - manifest-{{ image.name }}
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-      - run: uv sync
-      - run: uv run image-manager test {{ image.name }} --snapshot-id "$SNAPSHOT_ID"
+      - run: image-manager test {{ image.name }} --snapshot-id "$SNAPSHOT_ID"
