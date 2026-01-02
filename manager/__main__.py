@@ -21,8 +21,8 @@ def print_usage() -> None:
     print("  manifest <image:tag> Create multi-platform manifest from registry images")
     print("  sbom [image:tag]    Generate SBOM for an image (or all images)")
     print("  test [image:tag]    Test an image (or all images if none specified)")
-    print("  start [daemon]      Start daemons (buildkitd, registry, garage, dind, or all)")
-    print("  stop [daemon]       Stop daemons (buildkitd, registry, garage, dind, or all)")
+    print("  start [daemon]      Start daemons (buildkitd, dind, or all)")
+    print("  stop [daemon]       Stop daemons (buildkitd, dind, or all)")
     print("  status [daemon]     Check daemon status")
     print("  generate-ci         Generate CI configuration (default: gitlab)")
     print()
@@ -228,7 +228,7 @@ def cmd_generate(args: list[str]) -> int:
 
 def cmd_build(args: list[str]) -> int:
     """Build an image or all images."""
-    from manager.building import run_build, ensure_buildkitd, ensure_registry, ensure_garage
+    from manager.building import run_build, ensure_buildkitd
 
     context_path = None
     image_refs = []
@@ -270,16 +270,10 @@ def cmd_build(args: list[str]) -> int:
             print(f"Error: {e}", file=sys.stderr)
             return 1
 
-    # Start buildkitd and registry once for all builds
+    # Start buildkitd once for all builds
     if not ensure_buildkitd():
         print("Error: Failed to start buildkitd", file=sys.stderr)
         return 1
-    if not ensure_registry():
-        print("Error: Failed to start registry", file=sys.stderr)
-        return 1
-    if use_cache and not ensure_garage():
-        print("Warning: Failed to start garage, building without cache", file=sys.stderr)
-        use_cache = False
 
     # Build each image
     failed = []
@@ -305,7 +299,7 @@ def cmd_build(args: list[str]) -> int:
 
 def cmd_manifest(args: list[str]) -> int:
     """Create multi-platform manifest from platform images in registry."""
-    from manager.building import create_manifest_from_registry, ensure_registry
+    from manager.building import create_manifest_from_registry
 
     image_refs = []
     snapshot_id = None
@@ -326,11 +320,6 @@ def cmd_manifest(args: list[str]) -> int:
     if not image_refs:
         print("Error: image:tag is required for manifest command", file=sys.stderr)
         print("Usage: image-manager manifest <image:tag> [--snapshot-id ID]", file=sys.stderr)
-        return 1
-
-    # Start registry
-    if not ensure_registry():
-        print("Error: Failed to start registry", file=sys.stderr)
         return 1
 
     # Create manifests
@@ -489,11 +478,11 @@ def cmd_sbom(args: list[str]) -> int:
 
 def cmd_start(args: list[str]) -> int:
     """Start daemons."""
-    from manager.building import start_buildkitd, start_registry, start_garage
+    from manager.building import start_buildkitd
     from manager.testing import start_dind
 
     daemon = args[0] if args else "all"
-    valid_daemons = ("all", "buildkitd", "registry", "garage", "dind")
+    valid_daemons = ("all", "buildkitd", "dind")
 
     if daemon not in valid_daemons:
         print(f"Unknown daemon: {daemon}", file=sys.stderr)
@@ -503,16 +492,6 @@ def cmd_start(args: list[str]) -> int:
     if daemon in ("all", "buildkitd"):
         result = start_buildkitd()
         if result != 0 and daemon == "buildkitd":
-            return result
-
-    if daemon in ("all", "registry"):
-        result = start_registry()
-        if result != 0 and daemon == "registry":
-            return result
-
-    if daemon in ("all", "garage"):
-        result = start_garage()
-        if result != 0 and daemon == "garage":
             return result
 
     if daemon in ("all", "dind"):
@@ -525,11 +504,11 @@ def cmd_start(args: list[str]) -> int:
 
 def cmd_stop(args: list[str]) -> int:
     """Stop daemons."""
-    from manager.building import stop_buildkitd, stop_registry, stop_garage
+    from manager.building import stop_buildkitd
     from manager.testing import stop_dind
 
     daemon = args[0] if args else "all"
-    valid_daemons = ("all", "buildkitd", "registry", "garage", "dind")
+    valid_daemons = ("all", "buildkitd", "dind")
 
     if daemon not in valid_daemons:
         print(f"Unknown daemon: {daemon}", file=sys.stderr)
@@ -539,12 +518,6 @@ def cmd_stop(args: list[str]) -> int:
     if daemon in ("all", "buildkitd"):
         stop_buildkitd()
 
-    if daemon in ("all", "registry"):
-        stop_registry()
-
-    if daemon in ("all", "garage"):
-        stop_garage()
-
     if daemon in ("all", "dind"):
         stop_dind()
 
@@ -553,11 +526,11 @@ def cmd_stop(args: list[str]) -> int:
 
 def cmd_status(args: list[str]) -> int:
     """Check daemon status."""
-    from manager.building import is_buildkitd_running, get_socket_addr, is_registry_running, get_registry_addr, is_garage_running, get_garage_s3_endpoint
+    from manager.building import is_buildkitd_running, get_socket_addr
     from manager.testing import is_dind_running, get_docker_host
 
     daemon = args[0] if args else "all"
-    valid_daemons = ("all", "buildkitd", "registry", "garage", "dind")
+    valid_daemons = ("all", "buildkitd", "dind")
     all_running = True
 
     if daemon not in valid_daemons:
@@ -570,20 +543,6 @@ def cmd_status(args: list[str]) -> int:
             print(f"buildkitd: running (addr: {get_socket_addr()})")
         else:
             print("buildkitd: not running")
-            all_running = False
-
-    if daemon in ("all", "registry"):
-        if is_registry_running():
-            print(f"registry: running (addr: {get_registry_addr()})")
-        else:
-            print("registry: not running")
-            all_running = False
-
-    if daemon in ("all", "garage"):
-        if is_garage_running():
-            print(f"garage: running (addr: {get_garage_s3_endpoint()})")
-        else:
-            print("garage: not running")
             all_running = False
 
     if daemon in ("all", "dind"):
