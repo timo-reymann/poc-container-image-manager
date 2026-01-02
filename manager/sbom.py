@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from manager.building import get_bin_path, get_image_tar_path
+from manager.rendering import generate_tag_report
 
 # System font stack for HTML reports
 FONT_STACK = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif"
@@ -124,6 +125,8 @@ def run_sbom(
                 result = _run_syft(tar_path, sbom_path, format, image_ref)
                 if result != 0:
                     return result
+        # Regenerate tag report to include SBOM links
+        generate_tag_report(name, tag)
         return 0
     else:
         # Single platform fallback
@@ -136,7 +139,11 @@ def run_sbom(
 
         sbom_path = get_sbom_path(image_ref, format)
         print(f"Generating SBOM ({format}) for {image_ref}...")
-        return _run_syft(tar_path, sbom_path, format, image_ref)
+        result = _run_syft(tar_path, sbom_path, format, image_ref)
+        if result == 0:
+            # Regenerate tag report to include SBOM links
+            generate_tag_report(name, tag)
+        return result
 
 
 def parse_cyclonedx(sbom_path: Path) -> dict:
@@ -191,6 +198,10 @@ def generate_html_report(image_ref: str, sbom_path: Path) -> Path | None:
     report_path = sbom_path.parent / "sbom-report.html"
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    # Detect platform from path (e.g., linux-arm64 -> linux/arm64)
+    parent_name = sbom_path.parent.name
+    platform = parent_name.replace("-", "/") if parent_name.startswith("linux-") else None
+
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -207,6 +218,7 @@ def generate_html_report(image_ref: str, sbom_path: Path) -> Path | None:
         .stat {{ background: #f0f0f0; padding: 15px; border-radius: 4px; }}
         .stat-value {{ font-size: 24px; font-weight: bold; color: #333; }}
         .stat-label {{ color: #666; font-size: 14px; }}
+        .platform-badge {{ display: inline-block; background: #e0e7ff; color: #3730a3; padding: 4px 10px; border-radius: 4px; font-size: 14px; font-weight: 500; margin-left: 10px; }}
         .package-list {{ column-count: 2; column-gap: 40px; }}
         .package {{ break-inside: avoid; padding: 6px 0; border-bottom: 1px solid #f0f0f0; }}
         .package-name {{ font-weight: 500; color: #333; }}
@@ -218,7 +230,7 @@ def generate_html_report(image_ref: str, sbom_path: Path) -> Path | None:
 </head>
 <body>
     <div class="container">
-        <h1>SBOM: {image_ref}</h1>
+        <h1>SBOM: {image_ref}{f'<span class="platform-badge">{platform}</span>' if platform else ''}</h1>
         <div class="meta">
             Generated: {timestamp} |
             <a href="sbom.cyclonedx.json">Download CycloneDX JSON</a>

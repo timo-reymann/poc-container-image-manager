@@ -35,28 +35,32 @@ uv run image-manager <command> [args]
 Commands:
 - `generate` - Generate Dockerfiles and test configs from `images/`
 - `build [image:tag] [options]` - Build image(s) to `dist/<name>/<tag>/image.tar`
-
-Build options:
-  --no-cache          Disable S3 build cache
-  --platform PLAT     Build for specific platform only (amd64, arm64)
-                      Default: builds linux/amd64 + linux/arm64 with multi-platform manifest
+- `manifest <image:tag>` - Create multi-platform manifest from registry images
 - `sbom [image:tag] [--format FORMAT]` - Generate SBOM for image(s)
 - `test [image:tag]` - Test image(s) using the tar archive
 - `start [daemon]` - Start daemons (buildkitd, registry, garage, dind, or all)
 - `stop [daemon]` - Stop daemons
 - `status [daemon]` - Check daemon status
 
+Build options:
+  --no-cache          Disable S3 build cache
+  --platform PLAT     Build for specific platform only (amd64, arm64)
+                      Default: builds linux/amd64 + linux/arm64 with multi-platform manifest
+
+Manifest options:
+  --snapshot-id ID    Use snapshot ID suffix for registry tags
+
 When no image is specified for `build` or `test`, all images are processed in dependency order.
 
 Output in dist/:
-- `index.html` - Image catalog report
-- `<name>/index.html` - Per-image report
+- `index.html` - Image catalog with all images, tags, versions, and platform badges
+- `<name>/<tag>/index.html` - Tag report with platform details and SBOM links
 - `<name>/<tag>/linux-amd64/image.tar` - AMD64 platform image
 - `<name>/<tag>/linux-arm64/image.tar` - ARM64 platform image
 - `<name>/<tag>/image.tar` - Multi-platform OCI index (or single platform copy)
-- `Dockerfile` - Generated Dockerfile
-- `test.yml` - Test configuration
-- `sbom.cyclonedx.json` - SBOM in CycloneDX format (per platform)
+- `<name>/<tag>/Dockerfile` - Generated Dockerfile
+- `<name>/<tag>/test.yml` - Test configuration
+- `<name>/<tag>/linux-*/sbom.cyclonedx.json` - SBOM per platform
 
 ## Example
 
@@ -81,8 +85,11 @@ uv run image-manager build --no-cache
 uv run image-manager build base:2025.09 --platform amd64
 uv run image-manager build base:2025.09 --platform arm64
 
-# Build all platforms (default)
+# Build all platforms (default, uses emulation for non-native)
 uv run image-manager build base:2025.09
+
+# Create manifest from existing registry images
+uv run image-manager manifest base:2025.09
 
 # Generate SBOM in different formats
 uv run image-manager sbom --format spdx-json   # SPDX format
@@ -207,6 +214,66 @@ Benefits:
 - **Parallel safety**: Multiple MRs don't conflict
 - **Dependency consistency**: Generated Dockerfiles reference correct snapshot bases
 
+### Native multi-platform builds (CI)
+
+For faster builds, use native runners for each architecture instead of emulation:
+
+```shell
+# On arm64 runner:
+uv run image-manager build base:2025.09 --platform arm64
+
+# On amd64 runner:
+uv run image-manager build base:2025.09 --platform amd64
+
+# On merge step (any runner):
+uv run image-manager manifest base:2025.09
+```
+
+With snapshot IDs:
+
+```shell
+# On arm64 runner:
+uv run image-manager build base:2025.09 --platform arm64 --snapshot-id mr-123
+
+# On amd64 runner:
+uv run image-manager build base:2025.09 --platform amd64 --snapshot-id mr-123
+
+# Merge step:
+uv run image-manager manifest base:2025.09 --snapshot-id mr-123
+```
+
+The `manifest` command:
+1. Checks which platform images exist in registry (`base:2025.09-linux-amd64`, `base:2025.09-linux-arm64`)
+2. Creates multi-platform OCI index using `crane index append`
+3. Pushes manifest as `base:2025.09`
+4. Exports manifest to `dist/base/2025.09/image.tar`
+
+```
+┌─────────────────┐     ┌─────────────────┐
+│   arm64 Runner  │     │   amd64 Runner  │
+│  --platform     │     │  --platform     │
+│     arm64       │     │     amd64       │
+└────────┬────────┘     └────────┬────────┘
+         │                       │
+         │  base:tag-linux-arm64 │  base:tag-linux-amd64
+         └───────────┬───────────┘
+                     ▼
+             ┌───────────────┐
+             │   Registry    │
+             └───────┬───────┘
+                     │
+                     ▼
+             ┌───────────────┐
+             │  Merge Step   │
+             │   manifest    │
+             └───────┬───────┘
+                     │
+                     ▼  base:tag (multi-platform)
+             ┌───────────────┐
+             │   Registry    │
+             └───────────────┘
+```
+
 ## Features
 
 - Uses yaml and subfolders by convention to create images
@@ -303,17 +370,29 @@ Variants automatically get aliases with suffix:
 1. Generate     images/*.yml → dist/<name>/<tag>/Dockerfile
                             → dist/<name>/<tag>/test.yml
                             → dist/index.html (catalog)
-                            → dist/<name>/index.html (per-image)
 
-2. Build        Dockerfile → buildctl → image.tar
-                          ↓
-                    S3 cache (import/export)
-                          ↓
-                    Push to registry
+2. Build        For each platform (or single with --platform):
+                  Dockerfile → buildctl --opt platform=X → linux-X/image.tar
+                            ↓
+                      S3 cache (import/export)
+                            ↓
+                      Push to registry (tag-linux-X)
 
-3. SBOM         image.tar → syft scan → sbom.cyclonedx.json
+                If multiple platforms:
+                  crane index append → image.tar (multi-platform)
+                            ↓
+                      Push manifest to registry (tag)
 
-4. Test         image.tar → dind load → container-structure-test
+3. Manifest     (Alternative to building both platforms locally)
+                Check registry for platform images
+                            ↓
+                crane index append → image.tar (multi-platform)
+                            ↓
+                Push manifest to registry
+
+4. SBOM         linux-X/image.tar → syft scan → linux-X/sbom.cyclonedx.json
+
+5. Test         linux-X/image.tar → dind load → container-structure-test
 ```
 
 ### Container Architecture

@@ -17,6 +17,7 @@ def print_usage() -> None:
     print("Commands:")
     print("  generate            Generate Dockerfiles and test configs from images/")
     print("  build [image:tag]   Build an image (or all images if none specified)")
+    print("  manifest <image:tag> Create multi-platform manifest from registry images")
     print("  sbom [image:tag]    Generate SBOM for an image (or all images)")
     print("  test [image:tag]    Test an image (or all images if none specified)")
     print("  start [daemon]      Start daemons (buildkitd, registry, garage, dind, or all)")
@@ -33,6 +34,9 @@ def print_usage() -> None:
     print("  --no-cache          Disable S3 build cache")
     print("  --platform PLAT     Build for specific platform only (amd64, arm64)")
     print("                      Default: build all platforms + multi-platform manifest")
+    print()
+    print("Manifest options:")
+    print("  --snapshot-id ID    Use snapshot ID suffix for registry tags")
     print()
     print("SBOM options:")
     print("  --format FORMAT     SBOM format: cyclonedx-json (default), spdx-json, json")
@@ -97,7 +101,8 @@ def cmd_generate(args: list[str]) -> int:
             i += 1
 
     dist_path = Path("dist")
-    shutil.rmtree(dist_path.__str__(), ignore_errors=True)
+    # Don't clear dist - preserve built artifacts (image.tar, sbom, etc.)
+    # Just overwrite Dockerfile, test.yml, index.html, aliases
 
     # Load and resolve all images
     resolver = ModelResolver()
@@ -250,6 +255,58 @@ def cmd_build(args: list[str]) -> int:
         return 1
 
     print(f"\nSuccessfully built {len(image_refs)} image(s)")
+    return 0
+
+
+def cmd_manifest(args: list[str]) -> int:
+    """Create multi-platform manifest from platform images in registry."""
+    from manager.building import create_manifest_from_registry, ensure_registry
+
+    image_refs = []
+    snapshot_id = None
+
+    # Parse options and image refs
+    i = 0
+    while i < len(args):
+        if args[i] == "--snapshot-id" and i + 1 < len(args):
+            snapshot_id = args[i + 1]
+            i += 2
+        elif args[i].startswith("--"):
+            print(f"Unknown argument: {args[i]}", file=sys.stderr)
+            return 1
+        else:
+            image_refs.append(args[i])
+            i += 1
+
+    if not image_refs:
+        print("Error: image:tag is required for manifest command", file=sys.stderr)
+        print("Usage: image-manager manifest <image:tag> [--snapshot-id ID]", file=sys.stderr)
+        return 1
+
+    # Start registry
+    if not ensure_registry():
+        print("Error: Failed to start registry", file=sys.stderr)
+        return 1
+
+    # Create manifests
+    failed = []
+    for image_ref in image_refs:
+        print(f"\n{'='*60}")
+        print(f"Creating manifest for {image_ref}")
+        print(f"{'='*60}")
+        try:
+            result = create_manifest_from_registry(image_ref, snapshot_id=snapshot_id, auto_start=False)
+            if result != 0:
+                failed.append(image_ref)
+        except (RuntimeError, ValueError) as e:
+            print(f"Error: {e}", file=sys.stderr)
+            failed.append(image_ref)
+
+    if failed:
+        print(f"\nFailed to create manifest: {', '.join(failed)}", file=sys.stderr)
+        return 1
+
+    print(f"\nSuccessfully created {len(image_refs)} manifest(s)")
     return 0
 
 
@@ -509,6 +566,8 @@ def main():
         sys.exit(cmd_generate(args))
     elif command == "build":
         sys.exit(cmd_build(args))
+    elif command == "manifest":
+        sys.exit(cmd_manifest(args))
     elif command == "sbom":
         sys.exit(cmd_sbom(args))
     elif command == "test":

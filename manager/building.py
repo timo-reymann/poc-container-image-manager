@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 import docker
+from manager.rendering import generate_tag_report
 from docker.errors import NotFound, APIError
 
 # Default socket/config directory in project
@@ -1108,6 +1109,69 @@ def create_multiplatform_manifest(
     return 0
 
 
+def create_manifest_from_registry(
+    image_ref: str,
+    snapshot_id: str | None = None,
+    auto_start: bool = True,
+) -> int:
+    """Create a multi-platform manifest from platform images already in registry.
+
+    Checks which platform images exist in the registry and combines them into
+    a multi-platform manifest. Useful for combining images built on separate
+    native runners.
+
+    Args:
+        image_ref: Image reference (e.g., 'base:2025.09')
+        snapshot_id: Optional snapshot identifier
+        auto_start: If True, automatically start registry
+
+    Returns:
+        Exit code (0 for success)
+    """
+    if auto_start:
+        if not ensure_registry():
+            print("Error: Failed to start registry", file=sys.stderr)
+            return 1
+
+    crane = get_crane_path()
+    registry = get_registry_addr()
+
+    if ":" not in image_ref:
+        raise ValueError(f"Invalid image reference '{image_ref}'")
+
+    name, tag = image_ref.split(":", 1)
+
+    # Check which platform images exist in registry
+    available_platforms = []
+    for plat in SUPPORTED_PLATFORMS:
+        platform_path = platform_to_path(plat)
+        if snapshot_id:
+            ref = f"{registry}/{image_ref}-{snapshot_id}-{platform_path}"
+        else:
+            ref = f"{registry}/{image_ref}-{platform_path}"
+
+        # Check if image exists using crane digest
+        check_cmd = [str(crane), "digest", "--insecure", ref]
+        result = subprocess.run(check_cmd, capture_output=True, text=True)
+
+        if result.returncode == 0:
+            print(f"Found platform image: {ref}")
+            available_platforms.append(plat)
+        else:
+            print(f"Platform image not found: {ref}")
+
+    if not available_platforms:
+        print("Error: No platform images found in registry", file=sys.stderr)
+        return 1
+
+    if len(available_platforms) < 2:
+        print(f"Warning: Only {len(available_platforms)} platform(s) found, need 2+ for multi-platform manifest")
+        print("Proceeding with single platform...")
+
+    # Create the manifest
+    return create_multiplatform_manifest(image_ref, available_platforms, snapshot_id)
+
+
 def run_build(
     image_ref: str,
     context_path: Path | None = None,
@@ -1209,6 +1273,11 @@ def run_build(
     if failed_count > 0:
         print(f"Warning: {failed_count} platform(s) failed to build", file=sys.stderr)
         return 1 if not successful_platforms else 0
+
+    # Generate tag report
+    name, tag = image_ref.split(":", 1)
+    report_path = generate_tag_report(name, tag, snapshot_id)
+    print(f"Tag report: {report_path}")
 
     return 0
 
