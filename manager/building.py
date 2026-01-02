@@ -29,16 +29,14 @@ REGISTRY_PORT = 5050  # Using 5050 to avoid conflict with AirPlay on macOS
 REGISTRY_IMAGE = "registry:2"
 
 # Garage for S3-compatible build cache
-GARAGE_CONTAINER_NAME = "image-manager-garage"
 GARAGE_S3_PORT = 3900
 GARAGE_RPC_PORT = 3901
 GARAGE_ADMIN_PORT = 3903
-GARAGE_IMAGE = "dxflrs/garage:v2.1.0"
 GARAGE_BUCKET = "buildkit-cache"
 GARAGE_REGION = "garage"
-# These will be generated on first start
-GARAGE_ACCESS_KEY_ID = "GK" + "buildkit" + "0" * 24  # Placeholder, actual from garage
-GARAGE_SECRET_KEY = "buildkitsecret" + "0" * 18  # Placeholder, actual from garage
+# Fixed credentials matching infrastructure/garage-init.sh
+GARAGE_ACCESS_KEY_ID = "GKbuildkit00000000000000000000000"
+GARAGE_SECRET_KEY = "buildkitsecret000000000000000000000000000000"
 
 # Platform support
 SUPPORTED_PLATFORMS = ["linux/amd64", "linux/arm64"]
@@ -346,17 +344,7 @@ def check_registry_connection() -> bool:
         return False
 
 
-# --- Garage (S3 cache) management ---
-
-def get_garage_config_dir() -> Path:
-    """Get the directory for Garage configuration and data."""
-    return DEFAULT_BUILDKIT_DIR / "garage"
-
-
-def get_garage_credentials_file() -> Path:
-    """Get the path to stored Garage credentials."""
-    return get_garage_config_dir() / "credentials.json"
-
+# --- Garage (S3 cache) ---
 
 def get_garage_s3_endpoint() -> str:
     """Get the Garage S3 endpoint URL."""
@@ -374,281 +362,16 @@ def get_garage_s3_endpoint_for_buildkit() -> str:
     return f"http://localhost:{GARAGE_S3_PORT}"
 
 
-def is_garage_running() -> bool:
-    """Check if the Garage container is running."""
+def check_garage_connection() -> bool:
+    """Check if garage S3 endpoint is reachable."""
     try:
-        client = get_docker_client()
-        container = client.containers.get(GARAGE_CONTAINER_NAME)
-        return container.status == "running"
-    except NotFound:
-        return False
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1)
+        result = sock.connect_ex(('localhost', GARAGE_S3_PORT))
+        sock.close()
+        return result == 0
     except Exception:
         return False
-
-
-def get_garage_credentials() -> tuple[str, str] | None:
-    """Get stored Garage credentials (access_key_id, secret_key)."""
-    creds_file = get_garage_credentials_file()
-    if not creds_file.exists():
-        return None
-    try:
-        import json
-        creds = json.loads(creds_file.read_text())
-        return creds.get("access_key_id"), creds.get("secret_key")
-    except Exception:
-        return None
-
-
-def save_garage_credentials(access_key_id: str, secret_key: str) -> None:
-    """Save Garage credentials to file."""
-    import json
-    creds_file = get_garage_credentials_file()
-    creds_file.parent.mkdir(parents=True, exist_ok=True)
-    creds_file.write_text(json.dumps({
-        "access_key_id": access_key_id,
-        "secret_key": secret_key,
-    }))
-
-
-def generate_garage_config() -> str:
-    """Generate a minimal garage.toml for single-node setup."""
-    import secrets
-    rpc_secret = secrets.token_hex(32)
-    admin_token = secrets.token_hex(32)
-
-    return f"""
-replication_factor = 1
-consistency_mode = "consistent"
-
-metadata_dir = "/var/lib/garage/meta"
-data_dir = "/var/lib/garage/data"
-
-db_engine = "lmdb"
-
-rpc_secret = "{rpc_secret}"
-rpc_bind_addr = "[::]:3901"
-rpc_public_addr = "127.0.0.1:3901"
-
-[s3_api]
-api_bind_addr = "[::]:3900"
-s3_region = "{GARAGE_REGION}"
-root_domain = ".s3.garage"
-
-[admin]
-api_bind_addr = "0.0.0.0:3903"
-admin_token = "{admin_token}"
-"""
-
-
-def start_garage() -> int:
-    """Start Garage container for S3-compatible cache."""
-    if is_garage_running():
-        print("garage container is already running")
-        return 0
-
-    client = get_docker_client()
-    config_dir = get_garage_config_dir()
-    config_dir.mkdir(parents=True, exist_ok=True)
-
-    # Remove any existing container
-    try:
-        old = client.containers.get(GARAGE_CONTAINER_NAME)
-        old.remove(force=True)
-    except NotFound:
-        pass
-
-    # Generate config if not exists
-    config_file = config_dir / "garage.toml"
-    if not config_file.exists():
-        config_file.write_text(generate_garage_config())
-
-    # Create data directories
-    (config_dir / "meta").mkdir(exist_ok=True)
-    (config_dir / "data").mkdir(exist_ok=True)
-
-    print(f"Starting garage container ({GARAGE_IMAGE})...")
-    try:
-        container = client.containers.run(
-            GARAGE_IMAGE,
-            name=GARAGE_CONTAINER_NAME,
-            detach=True,
-            ports={
-                f"{GARAGE_S3_PORT}/tcp": ("127.0.0.1", GARAGE_S3_PORT),
-                f"{GARAGE_RPC_PORT}/tcp": ("127.0.0.1", GARAGE_RPC_PORT),
-                f"{GARAGE_ADMIN_PORT}/tcp": ("127.0.0.1", GARAGE_ADMIN_PORT),
-            },
-            volumes={
-                str(config_file.absolute()): {"bind": "/etc/garage.toml", "mode": "ro"},
-                str((config_dir / "meta").absolute()): {"bind": "/var/lib/garage/meta", "mode": "rw"},
-                str((config_dir / "data").absolute()): {"bind": "/var/lib/garage/data", "mode": "rw"},
-            },
-        )
-    except APIError as e:
-        print(f"Failed to start garage container: {e}", file=sys.stderr)
-        return 1
-
-    # Wait for garage to be ready
-    print("Waiting for garage to be ready...")
-    for _ in range(100):  # 10 second timeout
-        if is_port_open(GARAGE_S3_PORT):
-            break
-        time.sleep(0.1)
-    else:
-        print("Warning: garage started but S3 port not yet available", file=sys.stderr)
-
-    # Initialize the cluster if needed
-    time.sleep(1)  # Give garage a moment to fully start
-    if not _initialize_garage_cluster(container):
-        print("Warning: Failed to initialize garage cluster", file=sys.stderr)
-        return 1
-
-    print(f"garage container started (S3 endpoint: {get_garage_s3_endpoint()})")
-    return 0
-
-
-def _initialize_garage_cluster(container) -> bool:
-    """Initialize Garage cluster: configure node, create bucket, create key."""
-    import json
-
-    try:
-        # Get node ID - retry a few times as garage might need a moment
-        for attempt in range(5):
-            exit_code, output = container.exec_run("/garage status")
-            output_str = output.decode() if isinstance(output, bytes) else output
-            if exit_code == 0 and "HEALTHY NODES" in output_str:
-                break
-            time.sleep(1)
-        else:
-            print("Garage status check failed after retries", file=sys.stderr)
-            return False
-
-        # Check if already configured (look for NO ROLE ASSIGNED)
-        if "NO ROLE ASSIGNED" in output_str:
-            # Extract node ID from status table output
-            # Format: "ID                Hostname      Address..."
-            #         "6278c0a8e88e98d7  hostname      127.0.0.1:3901..."
-            lines = output_str.split("\n")
-            node_id = None
-            in_nodes_section = False
-            for line in lines:
-                if "HEALTHY NODES" in line:
-                    in_nodes_section = True
-                    continue
-                if in_nodes_section and line.strip() and not line.startswith("ID "):
-                    # First column is the node ID (16 hex chars)
-                    parts = line.split()
-                    if parts and len(parts[0]) == 16:
-                        node_id = parts[0]
-                        break
-
-            if not node_id:
-                print("Could not find node ID in garage status", file=sys.stderr)
-                print(f"Output was: {output_str}", file=sys.stderr)
-                return False
-
-            # Configure node with capacity
-            print(f"Configuring garage node {node_id}...")
-            exit_code, output = container.exec_run(
-                f"/garage layout assign -z dc1 -c 1G {node_id}"
-            )
-            if exit_code != 0:
-                print(f"Failed to assign layout: {output}", file=sys.stderr)
-                return False
-
-            # Apply layout
-            exit_code, output = container.exec_run("/garage layout apply --version 1")
-            if exit_code != 0:
-                # Try without version if layout already exists
-                exit_code, output = container.exec_run("/garage layout apply")
-                if exit_code != 0:
-                    print(f"Failed to apply layout: {output}", file=sys.stderr)
-                    return False
-
-            # Wait for layout to be applied
-            time.sleep(1)
-
-        # Check if bucket exists - retry as layout might still be initializing
-        for attempt in range(5):
-            exit_code, output = container.exec_run("/garage bucket list")
-            output_str = output.decode() if isinstance(output, bytes) else output
-            if exit_code == 0:
-                break
-            time.sleep(1)
-        else:
-            print(f"Failed to list buckets: {output_str}", file=sys.stderr)
-            return False
-
-        if GARAGE_BUCKET not in output_str:
-            print(f"Creating bucket '{GARAGE_BUCKET}'...")
-            exit_code, output = container.exec_run(f"/garage bucket create {GARAGE_BUCKET}")
-            if exit_code != 0:
-                print(f"Failed to create bucket: {output}", file=sys.stderr)
-                return False
-
-        # Check if we have stored credentials
-        creds = get_garage_credentials()
-        if creds is None:
-            # Create access key
-            print("Creating S3 access key...")
-            exit_code, output = container.exec_run("/garage key create buildkit-key")
-            output_str = output.decode() if isinstance(output, bytes) else output
-
-            # Parse key info - format varies, look for Key ID and Secret key
-            access_key = None
-            secret_key = None
-            for line in output_str.split("\n"):
-                if "Key ID:" in line:
-                    access_key = line.split("Key ID:")[1].strip()
-                elif "Secret key:" in line:
-                    secret_key = line.split("Secret key:")[1].strip()
-
-            if not access_key or not secret_key:
-                # Try alternative format
-                exit_code, output = container.exec_run("/garage key info buildkit-key")
-                output_str = output.decode() if isinstance(output, bytes) else output
-                for line in output_str.split("\n"):
-                    if "Key ID:" in line:
-                        access_key = line.split("Key ID:")[1].strip()
-                    elif "Secret key:" in line:
-                        secret_key = line.split("Secret key:")[1].strip()
-
-            if access_key and secret_key:
-                save_garage_credentials(access_key, secret_key)
-                print(f"Created and saved access key: {access_key[:10]}...")
-            else:
-                print("Warning: Could not parse access key from garage output", file=sys.stderr)
-                return False
-
-            # Grant bucket permissions
-            container.exec_run(f"/garage bucket allow --read --write --owner {GARAGE_BUCKET} --key buildkit-key")
-
-        return True
-
-    except Exception as e:
-        print(f"Error initializing garage: {e}", file=sys.stderr)
-        return False
-
-
-def stop_garage() -> int:
-    """Stop the Garage container."""
-    try:
-        client = get_docker_client()
-        container = client.containers.get(GARAGE_CONTAINER_NAME)
-        container.remove(force=True)
-        print("Stopped garage container")
-    except NotFound:
-        print("garage container was not running")
-    except Exception as e:
-        print(f"Error stopping garage: {e}", file=sys.stderr)
-        return 1
-    return 0
-
-
-def ensure_garage() -> bool:
-    """Ensure Garage is running, start if needed."""
-    if is_garage_running():
-        return True
-    return start_garage() == 0
 
 
 def get_crane_path() -> Path:
@@ -909,15 +632,12 @@ def run_build_platform(
     # Build cache arguments
     cache_args = []
     if use_cache:
-        creds = get_garage_credentials()
-        if creds:
-            access_key, secret_key = creds
-            s3_endpoint = get_garage_s3_endpoint_for_buildkit()
-            cache_name = f"{image_ref.split(':')[0]}-{platform_path}"
-            cache_args = [
-                "--export-cache", f"type=s3,endpoint_url={s3_endpoint},bucket={GARAGE_BUCKET},region={GARAGE_REGION},name={cache_name},access_key_id={access_key},secret_access_key={secret_key},use_path_style=true,mode=max",
-                "--import-cache", f"type=s3,endpoint_url={s3_endpoint},bucket={GARAGE_BUCKET},region={GARAGE_REGION},name={cache_name},access_key_id={access_key},secret_access_key={secret_key},use_path_style=true",
-            ]
+        s3_endpoint = get_garage_s3_endpoint_for_buildkit()
+        cache_name = f"{image_ref.split(':')[0]}-{platform_path}"
+        cache_args = [
+            "--export-cache", f"type=s3,endpoint_url={s3_endpoint},bucket={GARAGE_BUCKET},region={GARAGE_REGION},name={cache_name},access_key_id={GARAGE_ACCESS_KEY_ID},secret_access_key={GARAGE_SECRET_KEY},use_path_style=true,mode=max",
+            "--import-cache", f"type=s3,endpoint_url={s3_endpoint},bucket={GARAGE_BUCKET},region={GARAGE_REGION},name={cache_name},access_key_id={GARAGE_ACCESS_KEY_ID},secret_access_key={GARAGE_SECRET_KEY},use_path_style=true",
+        ]
 
     # Rewrite FROM for local base images
     dockerfile_path = context_path / "Dockerfile"
@@ -1151,8 +871,8 @@ def run_build(
         if not check_registry_connection():
             print("Error: Registry not reachable. Start it with: docker compose up -d registry", file=sys.stderr)
             return 1
-        if use_cache and not ensure_garage():
-            print("Warning: Failed to start garage, building without cache", file=sys.stderr)
+        if use_cache and not check_garage_connection():
+            print("Warning: Garage not reachable, building without cache. Start it with: docker compose up -d garage", file=sys.stderr)
             use_cache = False
 
     # Setup emulation if needed
