@@ -354,6 +354,20 @@ def check_registry_connection() -> bool:
         return False
 
 
+def docker_login(registry: str, username: str, password: str) -> bool:
+    """Log in to a Docker registry.
+
+    Returns True on success, False on failure.
+    """
+    try:
+        client = get_docker_client()
+        client.login(username=username, password=password, registry=registry)
+        return True
+    except Exception as e:
+        print(f"Warning: Docker login failed: {e}", file=sys.stderr)
+        return False
+
+
 # --- Garage (S3 cache) ---
 
 def get_garage_s3_endpoint() -> str:
@@ -865,6 +879,15 @@ def run_build(
         print(f"Error: Registry not reachable at {get_registry_url()}", file=sys.stderr)
         print("Run 'docker compose up -d' to start infrastructure services.", file=sys.stderr)
         return 1
+
+    # Before pushing to registry, log in if credentials are configured
+    auth = get_registry_auth()
+    if auth:
+        username, password = auth
+        registry_url = get_registry_url()
+        # Extract registry host (without path) for docker login
+        registry_host = registry_url.split("/")[0]
+        docker_login(registry_host, username, password)
 
     if use_cache and not check_garage_connection():
         print("Warning: Garage not reachable, building without cache", file=sys.stderr)
