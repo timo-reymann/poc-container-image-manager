@@ -60,6 +60,7 @@ Output in dist/:
 - `<name>/<tag>/image.tar` - Multi-platform OCI index (or single platform copy)
 - `<name>/<tag>/Dockerfile` - Generated Dockerfile
 - `<name>/<tag>/test.yml` - Test configuration
+- `<name>/<tag>/rootfs/` - Merged rootfs files (if any)
 - `<name>/<tag>/linux-*/sbom.cyclonedx.json` - SBOM per platform
 
 ## Example
@@ -281,6 +282,7 @@ The `manifest` command:
 - Supports layering images via variants
 - Allows supporting multiple tag hierarchies
 - **Automatic semantic version aliases** - Generates all prefix-level aliases from tags
+- **Rootfs file injection** - Copy static files into images with layered merging
 - Integration with container-structure-test for testing containers
 - **S3-based build caching** - Uses Garage for fast incremental builds
 
@@ -363,6 +365,116 @@ For tags like `9.0.100`, `9.0.200`, `9.1.50`:
 Variants automatically get aliases with suffix:
 - Variant tags: `9.0.100-semantic`, `9.0.200-semantic`
 - Aliases: `9-semantic` → `9.0.200-semantic`
+
+### Rootfs File Injection
+
+Copy static files into images using layered `rootfs/` directories. Files are merged using "later wins" semantics and automatically injected via `COPY` instruction.
+
+#### Directory Structure
+
+```
+images/
+└── python/
+    ├── rootfs/                    # Image level (lowest priority)
+    │   └── etc/
+    │       ├── python-info        # Will be overridden by version
+    │       └── image-level-only   # Unique to image level
+    └── 3/
+        ├── rootfs/                # Version level (higher priority)
+        │   └── etc/
+        │       ├── python-info    # Overrides image level
+        │       └── version-only   # Unique to version level
+        ├── semantic-release/
+        │   └── rootfs/            # Variant level (highest priority)
+        │       └── etc/
+        │           └── variant-only
+        └── image.yml
+```
+
+#### Merge Order (Later Wins)
+
+1. **Image level**: `images/<name>/rootfs/`
+2. **Version level**: `images/<name>/<version>/rootfs/`
+3. **Variant level**: `images/<name>/<version>/<variant>/rootfs/`
+
+Files from later levels replace files from earlier levels at the same path.
+
+#### Configuration Options
+
+In `image.yml`:
+
+```yaml
+# Image-level defaults
+rootfs_user: "0:0"    # Owner for COPY --chown (default: "0:0")
+rootfs_copy: true     # Whether to inject COPY instruction (default: true)
+
+tags:
+  - name: 3.13.7
+    rootfs_user: "1000:1000"  # Override for specific tag
+    rootfs_copy: false         # Disable injection for this tag
+
+variants:
+  - name: semantic-release
+    rootfs_user: "node:node"   # Override for variant
+```
+
+#### Generated Output
+
+When rootfs content exists and `rootfs_copy: true`:
+
+**Dockerfile** (COPY injected after first FROM):
+```dockerfile
+FROM base:2025.09
+COPY --chown=0:0 rootfs/ /
+USER 0
+...
+```
+
+**dist/ structure**:
+```
+dist/python/3.13.7/
+├── Dockerfile           # With COPY instruction
+├── rootfs/              # Merged files from all levels
+│   └── etc/
+│       ├── python-info      # Version-level content (later wins)
+│       ├── image-level-only # From image level
+│       └── version-only     # From version level
+└── test.yml
+```
+
+#### Testing Rootfs Content
+
+Use container-structure-test to verify files:
+
+```yaml
+# test.yml.tpl
+schemaVersion: 2.0.0
+fileExistenceTests:
+  - name: "config-exists"
+    path: "/etc/python-info"
+    shouldExist: true
+
+fileContentTests:
+  - name: "config-has-version-content"
+    path: "/etc/python-info"
+    expectedContents: ["level=version"]
+```
+
+#### Decision Table
+
+| Has rootfs content? | rootfs_copy | COPY injected? |
+|---------------------|-------------|----------------|
+| No                  | true        | No             |
+| No                  | false       | No             |
+| Yes                 | true        | Yes            |
+| Yes                 | false       | No             |
+
+#### Special Behaviors
+
+- **Symlinks preserved**: Symlinks in rootfs are copied as symlinks
+- **File replaces symlink**: Regular files from later levels replace symlinks from earlier levels
+- **Sensitive file warnings**: Files matching patterns like `.env`, `*.key`, `*.pem` generate warnings during generation
+- **Existing COPY skipped**: If Dockerfile already contains `COPY rootfs/`, injection is skipped
 
 ### Build Flow
 
