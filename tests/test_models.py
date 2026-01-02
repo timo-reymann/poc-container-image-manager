@@ -72,3 +72,56 @@ def test_variant_with_aliases():
     )
 
     assert variant.aliases == {"9-browser": "9.0.100-browser"}
+
+
+def test_tag_has_rootfs_fields():
+    """Test Tag dataclass has rootfs_user and rootfs_copy"""
+    tag = Tag(
+        name="1.0",
+        versions={},
+        variables={},
+        rootfs_user="1000:1000",
+        rootfs_copy=True
+    )
+    assert tag.rootfs_user == "1000:1000"
+    assert tag.rootfs_copy is True
+
+
+def test_tag_rootfs_defaults():
+    """Test Tag dataclass has correct defaults for rootfs fields"""
+    tag = Tag(name="1.0", versions={}, variables={})
+    assert tag.rootfs_user == "0:0"
+    assert tag.rootfs_copy is True
+
+
+def test_variant_has_rootfs_fields():
+    """Test Variant dataclass has rootfs_user and rootfs_copy"""
+    variant = Variant(
+        name="browser",
+        template_path=Path("test.tpl"),
+        tags=[],
+        rootfs_user="0:0",
+        rootfs_copy=False
+    )
+    assert variant.rootfs_user == "0:0"
+    assert variant.rootfs_copy is False
+
+
+def test_image_has_rootfs_fields():
+    """Test Image dataclass has rootfs_user and rootfs_copy"""
+    image = Image(
+        name="test",
+        path=Path("test"),
+        template_path=Path("test.tpl"),
+        versions={},
+        variables={},
+        tags=[],
+        variants=[],
+        is_base_image=False,
+        extends=None,
+        aliases={},
+        rootfs_user="1000:1000",
+        rootfs_copy=False
+    )
+    assert image.rootfs_user == "1000:1000"
+    assert image.rootfs_copy is False

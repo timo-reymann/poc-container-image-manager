@@ -13,6 +13,8 @@ class Tag:
     name: str
     versions: dict[str, str]
     variables: dict[str, str]
+    rootfs_user: str = "0:0"
+    rootfs_copy: bool = True
 
 
 @dataclass
@@ -22,6 +24,8 @@ class Variant:
     template_path: Path
     tags: list[Tag]
     aliases: dict[str, str] = field(default_factory=dict)
+    rootfs_user: str = "0:0"
+    rootfs_copy: bool = True
 
 
 @dataclass
@@ -37,6 +41,8 @@ class Image:
     is_base_image: bool
     extends: str | None
     aliases: dict[str, str]
+    rootfs_user: str = "0:0"
+    rootfs_copy: bool = True
 
     @property
     def root(self) -> Path:
