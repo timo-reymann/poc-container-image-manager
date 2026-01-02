@@ -1,5 +1,33 @@
+import os
 from pathlib import Path
-from manager.config import ImageConfig, TagConfig, VariantConfig, ConfigLoader
+from unittest.mock import patch
+import pytest
+from manager.config import ImageConfig, TagConfig, VariantConfig, ConfigLoader, expand_env_vars
+
+
+class TestExpandEnvVars:
+    def test_no_env_vars(self):
+        """Literal string returned unchanged."""
+        assert expand_env_vars("my-registry.com:5000") == "my-registry.com:5000"
+
+    def test_single_env_var(self):
+        """Single ${VAR} is expanded."""
+        with patch.dict(os.environ, {"REGISTRY_URL": "prod.example.com:5000"}):
+            assert expand_env_vars("${REGISTRY_URL}") == "prod.example.com:5000"
+
+    def test_missing_env_var_returns_none(self):
+        """Missing env var returns None."""
+        with patch.dict(os.environ, {}, clear=True):
+            os.environ.pop("MISSING_VAR", None)
+            assert expand_env_vars("${MISSING_VAR}") is None
+
+    def test_empty_string(self):
+        """Empty string returned unchanged."""
+        assert expand_env_vars("") == ""
+
+    def test_none_input(self):
+        """None input returns None."""
+        assert expand_env_vars(None) is None
 
 
 def test_load_minimal_config(tmp_path):

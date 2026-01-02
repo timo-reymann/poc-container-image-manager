@@ -1,6 +1,31 @@
+"""Configuration loading from .image-manager.yml."""
+
+import os
+import re
 from pathlib import Path
 from pydantic import BaseModel
 from pydantic_yaml import parse_yaml_file_as
+
+
+def expand_env_vars(value: str | None) -> str | None:
+    """Expand ${VAR} references in a string value.
+
+    Returns None if the value is None or contains an undefined env var.
+    """
+    if value is None:
+        return None
+
+    if not value:
+        return value
+
+    # Check if it's a pure env var reference like ${VAR}
+    match = re.fullmatch(r'\$\{([^}]+)\}', value)
+    if match:
+        var_name = match.group(1)
+        return os.environ.get(var_name)
+
+    # No env var pattern found, return as-is
+    return value
 
 
 class TagConfig(BaseModel):
