@@ -24,6 +24,7 @@ def print_usage() -> None:
     print("  start [daemon]      Start daemons (buildkitd, registry, garage, dind, or all)")
     print("  stop [daemon]       Stop daemons (buildkitd, registry, garage, dind, or all)")
     print("  status [daemon]     Check daemon status")
+    print("  generate-ci         Generate CI configuration (default: gitlab)")
     print()
     print("Options (generate, build, sbom, test):")
     print("  --snapshot-id ID    Use snapshot ID for MR/branch builds")
@@ -595,6 +596,45 @@ def cmd_status(args: list[str]) -> int:
     return 0 if all_running else 1
 
 
+def cmd_generate_ci(args: list[str]) -> int:
+    """Generate CI configuration."""
+    from manager.ci_generator import generate_gitlab_ci
+
+    # Parse --provider argument (default: gitlab)
+    provider = "gitlab"
+    i = 0
+    while i < len(args):
+        if args[i] == "--provider" and i + 1 < len(args):
+            provider = args[i + 1]
+            i += 2
+        else:
+            print(f"Unknown argument: {args[i]}", file=sys.stderr)
+            return 1
+
+    if provider != "gitlab":
+        print(f"Unsupported CI provider: {provider}", file=sys.stderr)
+        print("Supported providers: gitlab", file=sys.stderr)
+        return 1
+
+    # Load and resolve all images
+    resolver = ModelResolver()
+    all_images = []
+    for image_yaml in Path("images").glob("**/image.yml"):
+        config = ConfigLoader.load(image_yaml)
+        image = resolver.resolve(config, image_yaml.parent)
+        all_images.append(image)
+
+    # Sort by dependencies
+    sorted_images = sort_images(all_images)
+
+    # Generate CI
+    output_path = Path(".gitlab/ci/images.yml")
+    generate_gitlab_ci(sorted_images, output_path)
+
+    print(f"Generated CI configuration: {output_path}")
+    return 0
+
+
 def main():
     if len(sys.argv) < 2:
         print_usage()
@@ -622,6 +662,8 @@ def main():
         sys.exit(cmd_stop(args))
     elif command == "status":
         sys.exit(cmd_status(args))
+    elif command == "generate-ci":
+        sys.exit(cmd_generate_ci(args))
     else:
         print(f"Unknown command: {command}", file=sys.stderr)
         print_usage()
