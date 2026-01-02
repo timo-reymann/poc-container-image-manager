@@ -742,6 +742,54 @@ def platform_to_path(plat: str) -> str:
     return plat.replace("/", "-")
 
 
+def needs_emulation(target_platform: str) -> bool:
+    """Check if building for target platform requires QEMU emulation."""
+    native = get_native_platform()
+    return target_platform != native
+
+
+def is_binfmt_installed() -> bool:
+    """Check if binfmt handlers are registered for cross-platform builds."""
+    # Check if QEMU handlers are registered
+    binfmt_misc = Path("/proc/sys/fs/binfmt_misc")
+    if not binfmt_misc.exists():
+        return False
+
+    # Look for qemu handlers
+    for entry in binfmt_misc.iterdir():
+        if entry.name.startswith("qemu-"):
+            return True
+
+    return False
+
+
+def ensure_binfmt() -> bool:
+    """Ensure binfmt handlers are installed for cross-platform builds.
+
+    Runs the binfmt setup container if needed (requires privileged).
+    Returns True if emulation is available, False otherwise.
+    """
+    if is_binfmt_installed():
+        return True
+
+    print("Setting up QEMU emulation for cross-platform builds...")
+    try:
+        client = get_docker_client()
+        result = client.containers.run(
+            BINFMT_IMAGE,
+            command=["--install", "all"],
+            privileged=True,
+            remove=True,
+        )
+        print("QEMU emulation configured successfully")
+        return True
+    except Exception as e:
+        print(f"Warning: Failed to setup binfmt emulation: {e}", file=sys.stderr)
+        print("Cross-platform builds may not work. Run manually:", file=sys.stderr)
+        print(f"  docker run --privileged --rm {BINFMT_IMAGE} --install all", file=sys.stderr)
+        return False
+
+
 def push_to_registry(tar_path: Path, image_ref: str) -> bool:
     """Push a tar image to the local registry using crane.
 
