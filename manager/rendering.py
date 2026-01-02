@@ -298,7 +298,7 @@ def generate_image_report(images: list[Image], snapshot_id: str | None = None) -
         for tag in img.tags:
             aliases_for_tag = sorted(tag_to_aliases.get(tag.name, []))
             tag_path = dist_path / img.name / tag.name
-            platform_badges = get_platform_badges(tag_path)
+            platform_badges = get_platform_badges(tag_path, show_build_status=False)
 
             if aliases_for_tag:
                 aliases_str = ", ".join(aliases_for_tag)
@@ -322,7 +322,7 @@ def generate_image_report(images: list[Image], snapshot_id: str | None = None) -
                 for vtag in variant.tags:
                     aliases_for_vtag = sorted(vtag_to_aliases.get(vtag.name, []))
                     vtag_path = dist_path / img.name / vtag.name
-                    vplatform_badges = get_platform_badges(vtag_path)
+                    vplatform_badges = get_platform_badges(vtag_path, show_build_status=False)
 
                     if aliases_for_vtag:
                         aliases_str = ", ".join(aliases_for_vtag)
@@ -353,7 +353,7 @@ def generate_image_report(images: list[Image], snapshot_id: str | None = None) -
                     html += f"                        <td>{tag.versions.get(key, '-')}</td>\n"
                 # Add platforms column
                 tag_path = dist_path / img.name / tag.name
-                platforms_str = get_platform_badges(tag_path)
+                platforms_str = get_platform_badges(tag_path, show_build_status=False)
                 html += f"                        <td>{platforms_str}</td>\n"
                 html += "                    </tr>\n"
             html += """                </tbody>
@@ -461,7 +461,7 @@ def generate_single_image_report(img: Image, snapshot_id: str | None = None) -> 
         aliases_for_tag = sorted(tag_to_aliases.get(tag.name, []))
         # Detect platforms for this tag
         tag_path = dist_path / img.name / tag.name
-        platform_badges = get_platform_badges(tag_path)
+        platform_badges = get_platform_badges(tag_path, show_build_status=False)
 
         if aliases_for_tag:
             aliases_str = ", ".join(aliases_for_tag)
@@ -486,7 +486,7 @@ def generate_single_image_report(img: Image, snapshot_id: str | None = None) -> 
                 aliases_for_vtag = sorted(vtag_to_aliases.get(vtag.name, []))
                 # Detect platforms for this variant tag
                 vtag_path = dist_path / img.name / vtag.name
-                vplatform_badges = get_platform_badges(vtag_path)
+                vplatform_badges = get_platform_badges(vtag_path, show_build_status=False)
 
                 if aliases_for_vtag:
                     aliases_str = ", ".join(aliases_for_vtag)
@@ -517,7 +517,7 @@ def generate_single_image_report(img: Image, snapshot_id: str | None = None) -> 
                 html += f"                    <td>{tag.versions.get(key, '-')}</td>\n"
             # Add platforms column
             tag_path = dist_path / img.name / tag.name
-            platforms_str = get_platform_badges(tag_path)
+            platforms_str = get_platform_badges(tag_path, show_build_status=False)
             html += f"                    <td>{platforms_str}</td>\n"
             html += "                </tr>\n"
         html += """            </tbody>
