@@ -1,8 +1,9 @@
 import os
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 import pytest
-from manager.config import ImageConfig, TagConfig, VariantConfig, ConfigLoader, expand_env_vars
+from manager.config import ImageConfig, TagConfig, VariantConfig, ConfigLoader, expand_env_vars, load_config
 
 
 class TestExpandEnvVars:
@@ -134,3 +135,54 @@ variants:
     assert config.tags[0].rootfs_user == "0:0"
     assert config.tags[0].rootfs_copy is True
     assert config.variants[0].rootfs_user == "1000:1000"
+
+
+class TestLoadConfig:
+    def test_missing_file_returns_empty_dict(self, tmp_path, monkeypatch):
+        """Missing config file returns empty dict."""
+        monkeypatch.chdir(tmp_path)
+        # Clear any existing cache
+        from manager import config as config_module
+        config_module._config_cache = None
+
+        assert load_config() == {}
+
+    def test_loads_yaml_file(self, tmp_path, monkeypatch):
+        """Loads .image-manager.yml from current directory."""
+        config_file = tmp_path / ".image-manager.yml"
+        config_file.write_text("registry:\n  url: my-registry.com:5000\n")
+        monkeypatch.chdir(tmp_path)
+        # Clear any existing cache
+        from manager import config as config_module
+        config_module._config_cache = None
+
+        config = load_config()
+        assert config == {"registry": {"url": "my-registry.com:5000"}}
+
+    def test_empty_file_returns_empty_dict(self, tmp_path, monkeypatch):
+        """Empty config file returns empty dict."""
+        config_file = tmp_path / ".image-manager.yml"
+        config_file.write_text("")
+        monkeypatch.chdir(tmp_path)
+        # Clear any existing cache
+        from manager import config as config_module
+        config_module._config_cache = None
+
+        assert load_config() == {}
+
+    def test_config_is_cached(self, tmp_path, monkeypatch):
+        """Config is loaded once and cached."""
+        config_file = tmp_path / ".image-manager.yml"
+        config_file.write_text("registry:\n  url: first.com\n")
+        monkeypatch.chdir(tmp_path)
+
+        # Clear any existing cache
+        from manager import config as config_module
+        config_module._config_cache = None
+
+        first = load_config()
+        config_file.write_text("registry:\n  url: second.com\n")
+        second = load_config()
+
+        assert first["registry"]["url"] == "first.com"
+        assert second["registry"]["url"] == "first.com"  # Still cached

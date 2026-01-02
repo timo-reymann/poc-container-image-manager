@@ -3,8 +3,14 @@
 import os
 import re
 from pathlib import Path
+
+import yaml
 from pydantic import BaseModel
 from pydantic_yaml import parse_yaml_file_as
+
+_config_cache: dict | None = None
+
+CONFIG_FILE = ".image-manager.yml"
 
 
 def expand_env_vars(value: str | None) -> str | None:
@@ -26,6 +32,32 @@ def expand_env_vars(value: str | None) -> str | None:
 
     # No env var pattern found, return as-is
     return value
+
+
+def load_config() -> dict:
+    """Load .image-manager.yml from current directory.
+
+    Returns empty dict if file doesn't exist or is empty.
+    Result is cached for the duration of the process.
+    """
+    global _config_cache
+
+    if _config_cache is not None:
+        return _config_cache
+
+    config_path = Path.cwd() / CONFIG_FILE
+
+    if not config_path.exists():
+        _config_cache = {}
+        return _config_cache
+
+    try:
+        content = config_path.read_text()
+        _config_cache = yaml.safe_load(content) or {}
+    except Exception:
+        _config_cache = {}
+
+    return _config_cache
 
 
 class TagConfig(BaseModel):
