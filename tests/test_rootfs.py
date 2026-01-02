@@ -97,3 +97,25 @@ def test_has_rootfs_content_hidden_files(tmp_path):
     (rootfs / ".bashrc").write_text("content")
 
     assert has_rootfs_content([rootfs]) is True
+
+
+def test_merge_rootfs_file_replaces_symlink(tmp_path):
+    """Test that regular file from later level replaces symlink from earlier level"""
+    level1 = tmp_path / "level1"
+    level2 = tmp_path / "level2"
+    dest = tmp_path / "merged"
+
+    # Level 1: config is a symlink
+    (level1 / "etc").mkdir(parents=True)
+    (level1 / "etc" / "target").write_text("target content")
+    (level1 / "etc" / "config").symlink_to("target")
+
+    # Level 2: config is a regular file (should replace symlink)
+    (level2 / "etc").mkdir(parents=True)
+    (level2 / "etc" / "config").write_text("override content")
+
+    merge_rootfs([level1, level2], dest)
+
+    # config should be a regular file, not a symlink
+    assert not (dest / "etc" / "config").is_symlink()
+    assert (dest / "etc" / "config").read_text() == "override content"

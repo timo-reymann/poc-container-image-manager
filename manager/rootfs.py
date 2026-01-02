@@ -87,6 +87,9 @@ def merge_rootfs(rootfs_paths: list[Path], dest: Path) -> None:
                 dest_path.symlink_to(item.readlink())
             elif item.is_file():
                 dest_path.parent.mkdir(parents=True, exist_ok=True)
+                # Remove existing symlink before copying to ensure regular file replaces it
+                if dest_path.is_symlink():
+                    dest_path.unlink()
                 shutil.copy2(item, dest_path)
             elif item.is_dir():
                 dest_path.mkdir(parents=True, exist_ok=True)
