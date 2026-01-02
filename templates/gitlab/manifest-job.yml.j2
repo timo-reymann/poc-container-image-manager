@@ -1,5 +1,5 @@
 manifest-{{ image.name }}:
-  stage: manifest-{{ image.depth }}
+  stage: manifest-{{ image.name }}
   needs:
 {%- for platform in platforms %}
     - build-{{ image.name }}-{{ platform }}

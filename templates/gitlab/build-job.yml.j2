@@ -1,6 +1,6 @@
 {% for platform in platforms %}
 build-{{ image.name }}-{{ platform }}:
-  stage: build-{{ image.depth }}
+  stage: build-{{ image.name }}
 {%- if image.dependencies %}
   needs:
 {%- for dep in image.dependencies %}

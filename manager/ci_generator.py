@@ -72,11 +72,14 @@ def build_ci_context(images: list) -> dict:
             "depth": depths[image.name],
         })
 
-    # Generate stage names based on max depth
+    # Sort images by depth, then by name for consistent ordering
+    sorted_by_depth = sorted(image_contexts, key=lambda x: (x["depth"], x["name"]))
+
+    # Generate stage names: build-<image>, manifest-<image> for each image in order
     stages = []
-    for d in range(max_depth + 1):
-        stages.append(f"build-{d}")
-        stages.append(f"manifest-{d}")
+    for img in sorted_by_depth:
+        stages.append(f"build-{img['name']}")
+        stages.append(f"manifest-{img['name']}")
     stages.append("test")
 
     return {
