@@ -8,6 +8,7 @@ from manager.config import ConfigLoader
 from manager.models import ModelResolver
 from manager.rendering import RenderContext, render_dockerfile, render_test_config, generate_image_report
 from manager.dependency_graph import sort_images, extract_dependencies, CyclicDependencyError
+from manager.rootfs import collect_rootfs_paths, merge_rootfs, has_rootfs_content, warn_sensitive_files
 
 
 def print_usage() -> None:
@@ -141,7 +142,29 @@ def cmd_generate(args: list[str]) -> int:
             tag_out_path = image_out_path.joinpath(tag.name)
             tag_out_path.mkdir(parents=True, exist_ok=True)
 
-            ctx = RenderContext(image=image, all=sorted_images, tag=tag, variant=None, snapshot_id=snapshot_id)
+            # Collect and merge rootfs
+            rootfs_paths = collect_rootfs_paths(
+                image_path=image.path.parent,  # images/python
+                version_path=image.path,        # images/python/3
+                variant_name=None
+            )
+            has_rootfs = has_rootfs_content(rootfs_paths)
+
+            if has_rootfs:
+                merged_rootfs = tag_out_path / "rootfs"
+                merge_rootfs(rootfs_paths, merged_rootfs)
+                # Warn about sensitive files
+                for warning in warn_sensitive_files(merged_rootfs):
+                    print(warning, file=sys.stderr)
+
+            ctx = RenderContext(
+                image=image,
+                all=sorted_images,
+                tag=tag,
+                variant=None,
+                snapshot_id=snapshot_id,
+                has_rootfs=has_rootfs
+            )
 
             rendered_dockerfile = render_dockerfile(ctx)
             tag_out_path.joinpath("Dockerfile").write_text(rendered_dockerfile)
@@ -155,12 +178,33 @@ def cmd_generate(args: list[str]) -> int:
                 variant_out_path = image_out_path.joinpath(variant_tag.name)
                 variant_out_path.mkdir(parents=True, exist_ok=True)
 
-                ctx = RenderContext(image=image, all=sorted_images, tag=variant_tag, variant=variant, snapshot_id=snapshot_id)
+                # Collect and merge rootfs (including variant-specific)
+                rootfs_paths = collect_rootfs_paths(
+                    image_path=image.path.parent,
+                    version_path=image.path,
+                    variant_name=variant.name
+                )
+                has_rootfs = has_rootfs_content(rootfs_paths)
+
+                if has_rootfs:
+                    merged_rootfs = variant_out_path / "rootfs"
+                    merge_rootfs(rootfs_paths, merged_rootfs)
+                    for warning in warn_sensitive_files(merged_rootfs):
+                        print(warning, file=sys.stderr)
+
+                ctx = RenderContext(
+                    image=image,
+                    all=sorted_images,
+                    tag=variant_tag,
+                    variant=variant,
+                    snapshot_id=snapshot_id,
+                    has_rootfs=has_rootfs
+                )
 
                 rendered_dockerfile = render_dockerfile(ctx)
                 variant_out_path.joinpath("Dockerfile").write_text(rendered_dockerfile)
-                rendered_test_config = render_test_config(ctx)
 
+                rendered_test_config = render_test_config(ctx)
                 variant_out_path.joinpath("test.yml").write_text(rendered_test_config)
 
         # Write base aliases
