@@ -917,6 +917,111 @@ def get_image_tar_path(image_ref: str) -> Path:
     return Path("dist") / name / tag / "image.tar"
 
 
+def get_platform_tar_path(image_ref: str, plat: str) -> Path:
+    """Get the path to the platform-specific image tar file."""
+    if ":" not in image_ref:
+        raise ValueError(f"Invalid image reference '{image_ref}', expected format: name:tag")
+
+    name, tag = image_ref.split(":", 1)
+    platform_dir = platform_to_path(plat)
+    return Path("dist") / name / tag / platform_dir / "image.tar"
+
+
+def run_build_platform(
+    image_ref: str,
+    plat: str,
+    context_path: Path | None = None,
+    use_cache: bool = True,
+    snapshot_id: str | None = None,
+) -> int:
+    """Build an image for a specific platform.
+
+    Args:
+        image_ref: Image reference in format 'name:tag'
+        plat: Target platform (e.g., 'linux/amd64')
+        context_path: Optional explicit path to build context
+        use_cache: If True, use S3 cache via Garage
+        snapshot_id: Optional snapshot identifier for registry tags
+
+    Returns:
+        Exit code (0 for success)
+    """
+    if context_path is None:
+        context_path = find_build_context(image_ref)
+
+    tar_path = get_platform_tar_path(image_ref, plat)
+    tar_path.parent.mkdir(parents=True, exist_ok=True)
+
+    buildctl = get_buildctl_path()
+    addr = get_socket_addr()
+    registry = get_registry_addr()
+    platform_path = platform_to_path(plat)
+
+    # Build cache arguments
+    cache_args = []
+    if use_cache:
+        creds = get_garage_credentials()
+        if creds:
+            access_key, secret_key = creds
+            s3_endpoint = get_garage_s3_endpoint_for_buildkit()
+            cache_name = f"{image_ref.split(':')[0]}-{platform_path}"
+            cache_args = [
+                "--export-cache", f"type=s3,endpoint_url={s3_endpoint},bucket={GARAGE_BUCKET},region={GARAGE_REGION},name={cache_name},access_key_id={access_key},secret_access_key={secret_key},use_path_style=true,mode=max",
+                "--import-cache", f"type=s3,endpoint_url={s3_endpoint},bucket={GARAGE_BUCKET},region={GARAGE_REGION},name={cache_name},access_key_id={access_key},secret_access_key={secret_key},use_path_style=true",
+            ]
+
+    # Rewrite FROM for local base images
+    dockerfile_path = context_path / "Dockerfile"
+    local_images = get_local_images()
+    modified_content = rewrite_dockerfile_for_registry(dockerfile_path, local_images, snapshot_id)
+    original_content = dockerfile_path.read_text()
+
+    # Platform-specific image name for registry
+    platform_image_ref = f"{image_ref}-{platform_path}"
+
+    if modified_content != original_content:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_dockerfile = Path(tmpdir) / "Dockerfile"
+            tmp_dockerfile.write_text(modified_content)
+
+            cmd = [
+                str(buildctl), "--addr", addr, "build",
+                "--frontend", "dockerfile.v0",
+                "--local", f"context={context_path}",
+                "--local", f"dockerfile={tmpdir}",
+                "--output", f"type=docker,name={platform_image_ref},dest={tar_path}",
+                "--opt", f"platform={plat}",
+            ] + cache_args
+
+            print(f"Building {image_ref} for {plat}...")
+            result = subprocess.run(cmd)
+    else:
+        cmd = [
+            str(buildctl), "--addr", addr, "build",
+            "--frontend", "dockerfile.v0",
+            "--local", f"context={context_path}",
+            "--local", f"dockerfile={context_path}",
+            "--output", f"type=docker,name={platform_image_ref},dest={tar_path}",
+            "--opt", f"platform={plat}",
+        ] + cache_args
+
+        print(f"Building {image_ref} for {plat}...")
+        result = subprocess.run(cmd)
+
+    if result.returncode == 0:
+        print(f"Platform image saved to: {tar_path}")
+
+        # Push platform-specific image to registry
+        registry_ref = platform_image_ref
+        if snapshot_id:
+            registry_ref = f"{image_ref}-{snapshot_id}-{platform_path}"
+
+        if push_to_registry(tar_path, registry_ref):
+            print(f"Platform image pushed: {get_registry_addr()}/{registry_ref}")
+
+    return result.returncode
+
+
 def run_build(
     image_ref: str,
     context_path: Path | None = None,
