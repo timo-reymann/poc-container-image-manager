@@ -1,0 +1,51 @@
+services:
+  garage:
+    image: dxflrs/garage:v2.1.0
+    ports:
+      - "127.0.0.1:3900:3900"  # S3 API
+      - "127.0.0.1:3901:3901"  # RPC
+      - "127.0.0.1:3903:3903"  # Admin
+    volumes:
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+      - ./infrastructure/garage.toml:/etc/garage.toml:ro
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3903/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  garage-init:
+    image: curlimages/curl:latest
+    depends_on:
+      garage:
+        condition: service_healthy
+    volumes:
+      - ./infrastructure/garage-init.sh:/init.sh:ro
+    entrypoint: ["/bin/sh", "/init.sh"]
+    restart: "no"
+
+  registry:
+    image: registry:2
+    ports:
+      - "127.0.0.1:5050:5000"
+    volumes:
+      - registry-data:/var/lib/registry
+    environment:
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+
+  registry-ui:
+    image: joxit/docker-registry-ui:latest
+    ports:
+      - "127.0.0.1:5051:80"
+    environment:
+      - REGISTRY_TITLE=Image Manager Registry
+      - NGINX_PROXY_PASS_URL=http://registry:5000
+      - SINGLE_REGISTRY=true
+    depends_on:
+      - registry
+
+volumes:
+  garage-meta:
+  garage-data:
+  registry-data:
