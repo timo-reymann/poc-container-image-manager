@@ -11,6 +11,9 @@ from manager.models import Image, Tag, Variant
 FONT_STACK = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif"
 
 
+EXPECTED_PLATFORMS = ["linux/amd64", "linux/arm64"]
+
+
 def detect_platforms(tag_path: Path) -> list[str]:
     """Detect available platforms from built artifacts."""
     platforms = []
@@ -19,6 +22,32 @@ def detect_platforms(tag_path: Path) -> list[str]:
             if d.is_dir() and d.name.startswith("linux-"):
                 platforms.append(d.name.replace("-", "/"))
     return platforms
+
+
+def get_platform_badges(tag_path: Path, show_build_status: bool = True) -> str:
+    """Generate platform badges showing expected and built platforms.
+
+    Args:
+        tag_path: Path to the tag directory
+        show_build_status: If True, show built (solid) vs planned (dimmed) status
+
+    Returns:
+        HTML string with platform badges
+    """
+    built_platforms = detect_platforms(tag_path)
+    badges = []
+    for platform in EXPECTED_PLATFORMS:
+        arch = platform.split("/")[1]
+        if platform in built_platforms:
+            # Built - solid green
+            badges.append(f'<span class="platform-mini">{arch}</span>')
+        elif show_build_status:
+            # Not built - dimmed/outlined
+            badges.append(f'<span class="platform-mini platform-planned">{arch}</span>')
+        else:
+            # Always show as available
+            badges.append(f'<span class="platform-mini">{arch}</span>')
+    return "".join(badges)
 
 
 def get_platform_size(tag_path: Path, platform: str) -> str:
@@ -198,6 +227,7 @@ def generate_image_report(images: list[Image], snapshot_id: str | None = None) -
         .variant-aliases {{ display: inline-block; background: #fde68a; color: #92400e; padding: 4px 8px; font-size: 11px; font-family: monospace; border-left: 1px solid #fcd34d; }}
         .base-image {{ display: inline-block; background: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 3px; font-size: 11px; margin-left: 10px; }}
         .platform-mini {{ display: inline-block; background: #d1fae5; color: #065f46; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 4px; }}
+        .platform-planned {{ background: #f3f4f6; color: #9ca3af; border: 1px dashed #d1d5db; }}
         table {{ width: 100%; border-collapse: collapse; margin: 15px 0; }}
         th, td {{ text-align: left; padding: 10px; border-bottom: 1px solid #eee; }}
         th {{ background: #f9f9f9; font-weight: 600; }}
@@ -267,10 +297,8 @@ def generate_image_report(images: list[Image], snapshot_id: str | None = None) -
 """
         for tag in img.tags:
             aliases_for_tag = sorted(tag_to_aliases.get(tag.name, []))
-            # Detect platforms for this tag
             tag_path = dist_path / img.name / tag.name
-            platforms = detect_platforms(tag_path)
-            platform_badges = "".join(f'<span class="platform-mini">{p.split("/")[1]}</span>' for p in platforms)
+            platform_badges = get_platform_badges(tag_path)
 
             if aliases_for_tag:
                 aliases_str = ", ".join(aliases_for_tag)
@@ -293,10 +321,8 @@ def generate_image_report(images: list[Image], snapshot_id: str | None = None) -
                 html += f'                <strong>{variant.name}</strong><br>\n'
                 for vtag in variant.tags:
                     aliases_for_vtag = sorted(vtag_to_aliases.get(vtag.name, []))
-                    # Detect platforms for this variant tag
                     vtag_path = dist_path / img.name / vtag.name
-                    vplatforms = detect_platforms(vtag_path)
-                    vplatform_badges = "".join(f'<span class="platform-mini">{p.split("/")[1]}</span>' for p in vplatforms)
+                    vplatform_badges = get_platform_badges(vtag_path)
 
                     if aliases_for_vtag:
                         aliases_str = ", ".join(aliases_for_vtag)
@@ -327,8 +353,7 @@ def generate_image_report(images: list[Image], snapshot_id: str | None = None) -
                     html += f"                        <td>{tag.versions.get(key, '-')}</td>\n"
                 # Add platforms column
                 tag_path = dist_path / img.name / tag.name
-                tag_platforms = detect_platforms(tag_path)
-                platforms_str = "".join(f'<span class="platform-mini">{p.split("/")[1]}</span>' for p in tag_platforms) if tag_platforms else '-'
+                platforms_str = get_platform_badges(tag_path)
                 html += f"                        <td>{platforms_str}</td>\n"
                 html += "                    </tr>\n"
             html += """                </tbody>
@@ -386,6 +411,7 @@ def generate_single_image_report(img: Image, snapshot_id: str | None = None) -> 
         .variant-aliases {{ display: inline-block; background: #fde68a; color: #92400e; padding: 4px 8px; font-size: 11px; font-family: monospace; border-left: 1px solid #fcd34d; }}
         .base-image {{ display: inline-block; background: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 3px; font-size: 11px; margin-left: 10px; }}
         .platform-mini {{ display: inline-block; background: #d1fae5; color: #065f46; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 4px; }}
+        .platform-planned {{ background: #f3f4f6; color: #9ca3af; border: 1px dashed #d1d5db; }}
         table {{ width: 100%; border-collapse: collapse; margin: 15px 0; }}
         th, td {{ text-align: left; padding: 10px; border-bottom: 1px solid #eee; }}
         th {{ background: #f9f9f9; font-weight: 600; }}
@@ -435,8 +461,7 @@ def generate_single_image_report(img: Image, snapshot_id: str | None = None) -> 
         aliases_for_tag = sorted(tag_to_aliases.get(tag.name, []))
         # Detect platforms for this tag
         tag_path = dist_path / img.name / tag.name
-        platforms = detect_platforms(tag_path)
-        platform_badges = "".join(f'<span class="platform-mini">{p.split("/")[1]}</span>' for p in platforms)
+        platform_badges = get_platform_badges(tag_path)
 
         if aliases_for_tag:
             aliases_str = ", ".join(aliases_for_tag)
@@ -461,8 +486,7 @@ def generate_single_image_report(img: Image, snapshot_id: str | None = None) -> 
                 aliases_for_vtag = sorted(vtag_to_aliases.get(vtag.name, []))
                 # Detect platforms for this variant tag
                 vtag_path = dist_path / img.name / vtag.name
-                vplatforms = detect_platforms(vtag_path)
-                vplatform_badges = "".join(f'<span class="platform-mini">{p.split("/")[1]}</span>' for p in vplatforms)
+                vplatform_badges = get_platform_badges(vtag_path)
 
                 if aliases_for_vtag:
                     aliases_str = ", ".join(aliases_for_vtag)
@@ -493,8 +517,7 @@ def generate_single_image_report(img: Image, snapshot_id: str | None = None) -> 
                 html += f"                    <td>{tag.versions.get(key, '-')}</td>\n"
             # Add platforms column
             tag_path = dist_path / img.name / tag.name
-            tag_platforms = detect_platforms(tag_path)
-            platforms_str = "".join(f'<span class="platform-mini">{p.split("/")[1]}</span>' for p in tag_platforms) if tag_platforms else '-'
+            platforms_str = get_platform_badges(tag_path)
             html += f"                    <td>{platforms_str}</td>\n"
             html += "                </tr>\n"
         html += """            </tbody>
