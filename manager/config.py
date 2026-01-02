@@ -8,6 +8,8 @@ class TagConfig(BaseModel):
     name: str
     versions: dict[str, str] = {}
     variables: dict[str, str] = {}
+    rootfs_user: str | None = None
+    rootfs_copy: bool | None = None
 
 
 class VariantConfig(BaseModel):
@@ -17,6 +19,8 @@ class VariantConfig(BaseModel):
     template: str | None = None
     versions: dict[str, str] = {}
     variables: dict[str, str] = {}
+    rootfs_user: str | None = None
+    rootfs_copy: bool | None = None
 
 
 class ImageConfig(BaseModel):
@@ -30,6 +34,8 @@ class ImageConfig(BaseModel):
     is_base_image: bool = False
     extends: str | None = None
     aliases: dict[str, str] = {}
+    rootfs_user: str | None = None
+    rootfs_copy: bool | None = None
 
 
 class ConfigLoader:
