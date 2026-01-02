@@ -770,7 +770,6 @@ def create_multiplatform_manifest(
 def create_manifest_from_registry(
     image_ref: str,
     snapshot_id: str | None = None,
-    auto_start: bool = True,
 ) -> int:
     """Create a multi-platform manifest from platform images already in registry.
 
@@ -781,15 +780,14 @@ def create_manifest_from_registry(
     Args:
         image_ref: Image reference (e.g., 'base:2025.09')
         snapshot_id: Optional snapshot identifier
-        auto_start: If True, automatically start registry
 
     Returns:
         Exit code (0 for success)
     """
-    if auto_start:
-        if not check_registry_connection():
-            print("Error: Registry not reachable. Start it with: docker compose up -d registry", file=sys.stderr)
-            return 1
+    if not check_registry_connection():
+        print("Error: Registry not reachable at localhost:5050", file=sys.stderr)
+        print("Run 'docker compose up -d' to start infrastructure services.", file=sys.stderr)
+        return 1
 
     crane = get_crane_path()
     registry = get_registry_addr()
@@ -833,7 +831,6 @@ def create_manifest_from_registry(
 def run_build(
     image_ref: str,
     context_path: Path | None = None,
-    auto_start: bool = True,
     use_cache: bool = True,
     snapshot_id: str | None = None,
     platforms: list[str] | None = None,
@@ -846,7 +843,6 @@ def run_build(
     Args:
         image_ref: Image reference in format 'name:tag'
         context_path: Optional explicit path to build context
-        auto_start: If True, automatically start buildkitd and registry
         use_cache: If True, use S3 cache via Garage
         snapshot_id: Optional snapshot identifier for registry tags
         platforms: List of platforms to build. None = all platforms.
@@ -854,6 +850,16 @@ def run_build(
     Returns:
         Exit code from buildctl
     """
+    # Check registry connection
+    if not check_registry_connection():
+        print("Error: Registry not reachable at localhost:5050", file=sys.stderr)
+        print("Run 'docker compose up -d' to start infrastructure services.", file=sys.stderr)
+        return 1
+
+    if use_cache and not check_garage_connection():
+        print("Warning: Garage not reachable, building without cache", file=sys.stderr)
+        use_cache = False
+
     # Normalize platforms
     if platforms is None:
         platforms = SUPPORTED_PLATFORMS.copy()
@@ -863,17 +869,6 @@ def run_build(
     # Check if we need emulation
     native = get_native_platform()
     needs_cross = any(p != native for p in platforms)
-
-    if auto_start:
-        if not ensure_buildkitd():
-            print("Error: Failed to start buildkitd", file=sys.stderr)
-            return 1
-        if not check_registry_connection():
-            print("Error: Registry not reachable. Start it with: docker compose up -d registry", file=sys.stderr)
-            return 1
-        if use_cache and not check_garage_connection():
-            print("Warning: Garage not reachable, building without cache. Start it with: docker compose up -d garage", file=sys.stderr)
-            use_cache = False
 
     # Setup emulation if needed
     if needs_cross:

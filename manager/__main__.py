@@ -288,7 +288,7 @@ def cmd_build(args: list[str]) -> int:
         print(f"Building {image_ref}")
         print(f"{'='*60}")
         try:
-            result = run_build(image_ref, context_path, auto_start=False, use_cache=use_cache, snapshot_id=snapshot_id, platforms=platforms)
+            result = run_build(image_ref, context_path, use_cache=use_cache, snapshot_id=snapshot_id, platforms=platforms)
             if result != 0:
                 failed.append(image_ref)
         except (RuntimeError, FileNotFoundError, ValueError) as e:
@@ -340,7 +340,7 @@ def cmd_manifest(args: list[str]) -> int:
         print(f"Creating manifest for {image_ref}")
         print(f"{'='*60}")
         try:
-            result = create_manifest_from_registry(image_ref, snapshot_id=snapshot_id, auto_start=False)
+            result = create_manifest_from_registry(image_ref, snapshot_id=snapshot_id)
             if result != 0:
                 failed.append(image_ref)
         except (RuntimeError, ValueError) as e:
