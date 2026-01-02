@@ -31,6 +31,8 @@ def print_usage() -> None:
     print()
     print("Build options:")
     print("  --no-cache          Disable S3 build cache")
+    print("  --platform PLAT     Build for specific platform only (amd64, arm64)")
+    print("                      Default: build all platforms + multi-platform manifest")
     print()
     print("SBOM options:")
     print("  --format FORMAT     SBOM format: cyclonedx-json (default), spdx-json, json")
@@ -179,6 +181,7 @@ def cmd_build(args: list[str]) -> int:
     image_refs = []
     use_cache = True
     snapshot_id = None
+    platforms = None
 
     # Parse options and image refs
     i = 0
@@ -191,6 +194,9 @@ def cmd_build(args: list[str]) -> int:
             i += 1
         elif args[i] == "--snapshot-id" and i + 1 < len(args):
             snapshot_id = args[i + 1]
+            i += 2
+        elif args[i] == "--platform" and i + 1 < len(args):
+            platforms = [args[i + 1]]
             i += 2
         elif args[i].startswith("--"):
             print(f"Unknown argument: {args[i]}", file=sys.stderr)
@@ -229,7 +235,7 @@ def cmd_build(args: list[str]) -> int:
         print(f"Building {image_ref}")
         print(f"{'='*60}")
         try:
-            result = run_build(image_ref, context_path, auto_start=False, use_cache=use_cache, snapshot_id=snapshot_id)
+            result = run_build(image_ref, context_path, auto_start=False, use_cache=use_cache, snapshot_id=snapshot_id, platforms=platforms)
             if result != 0:
                 failed.append(image_ref)
         except (RuntimeError, FileNotFoundError, ValueError) as e:
