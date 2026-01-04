@@ -49,6 +49,9 @@ PLATFORM_ALIASES = {
 }
 BINFMT_IMAGE = "tonistiigi/binfmt"
 
+# Build reproducibility (2026-01-01 00:00:00 UTC)
+SOURCE_DATE_EPOCH = "1767225600"
+
 
 def get_docker_client() -> docker.DockerClient:
     """Get Docker client for the host daemon."""
@@ -699,6 +702,14 @@ def run_build_platform(
     # Platform-specific image name for registry
     platform_image_ref = f"{image_ref}-{platform_path}"
 
+    # Build reproducibility args
+    repro_args = [
+        "--opt", f"build-arg:SOURCE_DATE_EPOCH={SOURCE_DATE_EPOCH}",
+    ]
+    policy_file = context_path / "policy.json"
+    if policy_file.exists():
+        repro_args.extend(["--source-policy-file", str(policy_file)])
+
     if modified_content != original_content:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_dockerfile = Path(tmpdir) / "Dockerfile"
@@ -709,9 +720,9 @@ def run_build_platform(
                 "--frontend", "dockerfile.v0",
                 "--local", f"context={context_path}",
                 "--local", f"dockerfile={tmpdir}",
-                "--output", f"type=docker,name={platform_image_ref},dest={tar_path}",
+                "--output", f"type=docker,name={platform_image_ref},dest={tar_path},rewrite-timestamp=true",
                 "--opt", f"platform={plat}",
-            ] + cache_args
+            ] + repro_args + cache_args
 
             print(f"Building {image_ref} for {plat}...")
             result = subprocess.run(cmd)
@@ -721,9 +732,9 @@ def run_build_platform(
             "--frontend", "dockerfile.v0",
             "--local", f"context={context_path}",
             "--local", f"dockerfile={context_path}",
-            "--output", f"type=docker,name={platform_image_ref},dest={tar_path}",
+            "--output", f"type=docker,name={platform_image_ref},dest={tar_path},rewrite-timestamp=true",
             "--opt", f"platform={plat}",
-        ] + cache_args
+        ] + repro_args + cache_args
 
         print(f"Building {image_ref} for {plat}...")
         result = subprocess.run(cmd)
