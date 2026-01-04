@@ -55,11 +55,11 @@ class ContainerImageDefinition(BaseModel):
 
     @property
     def dockerfile_template_path(self) -> Path:
-        return self.root.joinpath("Dockerfile.tpl")
+        return self.root.joinpath("Dockerfile.jinja2")
 
     @property
     def test_config_path(self):
-        return self.root.joinpath("test.yml.tpl")
+        return self.root.joinpath("test.yml.jinja2")
 
     @property
     def full_qualified_base_image_name(self):

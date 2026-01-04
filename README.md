@@ -469,7 +469,7 @@ dist/python/3.13.7/
 Use container-structure-test to verify files:
 
 ```yaml
-# test.yml.tpl
+# test.yml.jinja2
 schemaVersion: 2.0.0
 fileExistenceTests:
   - name: "config-exists"

@@ -10,7 +10,7 @@ def test_resolve_simple_image(tmp_path):
     image_dir.mkdir(parents=True)
     templates_dir = tmp_path / "images" / "python" / "templates"
     templates_dir.mkdir(parents=True)
-    (templates_dir / "Dockerfile.tpl").touch()
+    (templates_dir / "Dockerfile.jinja2").touch()
 
     config = ImageConfig(
         name="python",
@@ -43,8 +43,8 @@ def test_resolve_image_with_variants(tmp_path):
     image_dir.mkdir(parents=True)
     templates_dir = tmp_path / "images" / "python" / "templates"
     templates_dir.mkdir(parents=True)
-    (templates_dir / "Dockerfile.tpl").touch()
-    (templates_dir / "Dockerfile.browser.tpl").touch()
+    (templates_dir / "Dockerfile.jinja2").touch()
+    (templates_dir / "Dockerfile.browser.jinja2").touch()
 
     config = ImageConfig(
         name="python",
@@ -79,7 +79,7 @@ def test_resolve_finds_templates_dir(tmp_path):
     image_dir.mkdir(parents=True)
     templates_dir = tmp_path / "images" / "python" / "templates"
     templates_dir.mkdir(parents=True)
-    (templates_dir / "Dockerfile.tpl").touch()
+    (templates_dir / "Dockerfile.jinja2").touch()
 
     config = ImageConfig(
         name="python",
@@ -89,7 +89,7 @@ def test_resolve_finds_templates_dir(tmp_path):
     resolver = ModelResolver()
     image = resolver.resolve(config, image_dir)
 
-    assert image.template_path == templates_dir / "Dockerfile.tpl"
+    assert image.template_path == templates_dir / "Dockerfile.jinja2"
 
 
 def test_name_detection_regular_image():
@@ -143,7 +143,7 @@ def test_name_detection_base_image_by_path():
     test_path.mkdir(parents=True, exist_ok=True)
     templates_dir = fixtures_dir / "base" / "templates"
     templates_dir.mkdir(parents=True, exist_ok=True)
-    (templates_dir / "Dockerfile.tpl").touch()
+    (templates_dir / "Dockerfile.jinja2").touch()
 
     resolver = ModelResolver()
     # Path contains "base", so should use directory name

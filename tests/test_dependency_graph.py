@@ -51,7 +51,7 @@ def test_extract_with_single_quotes():
 def test_extract_dependencies_single_image(tmp_path):
     """Test extracting dependencies from a single image with one dependency"""
     # Create template file
-    template_file = tmp_path / "Dockerfile.tpl"
+    template_file = tmp_path / "Dockerfile.jinja2"
     template_file.write_text('FROM {{ "ubuntu" | resolve_base_image }}')
 
     image = Image(
@@ -77,12 +77,12 @@ def test_extract_dependencies_multiple_images(tmp_path):
     # Create template files
     base_dir = tmp_path / "base"
     base_dir.mkdir()
-    base_template = base_dir / "Dockerfile.tpl"
+    base_template = base_dir / "Dockerfile.jinja2"
     base_template.write_text('FROM ubuntu:22.04')
 
     app_dir = tmp_path / "app"
     app_dir.mkdir()
-    app_template = app_dir / "Dockerfile.tpl"
+    app_template = app_dir / "Dockerfile.jinja2"
     app_template.write_text('FROM {{ "base" | resolve_base_image }}')
 
     image1 = Image(
@@ -122,7 +122,7 @@ def test_extract_dependencies_multiple_images(tmp_path):
 def test_extract_dependencies_no_dependencies(tmp_path):
     """Test image with no dependencies (external base image)"""
     # Create template file with external base image (not using resolve_base_image)
-    template_file = tmp_path / "Dockerfile.tpl"
+    template_file = tmp_path / "Dockerfile.jinja2"
     template_file.write_text('FROM ubuntu:22.04')
 
     image = Image(
@@ -148,17 +148,17 @@ def test_extract_dependencies_transitive(tmp_path):
     # Create template files with dependency chain: app -> middle -> base
     base_dir = tmp_path / "base"
     base_dir.mkdir()
-    base_template = base_dir / "Dockerfile.tpl"
+    base_template = base_dir / "Dockerfile.jinja2"
     base_template.write_text('FROM ubuntu:22.04')
 
     middle_dir = tmp_path / "middle"
     middle_dir.mkdir()
-    middle_template = middle_dir / "Dockerfile.tpl"
+    middle_template = middle_dir / "Dockerfile.jinja2"
     middle_template.write_text('FROM {{ "base" | resolve_base_image }}')
 
     app_dir = tmp_path / "app"
     app_dir.mkdir()
-    app_template = app_dir / "Dockerfile.tpl"
+    app_template = app_dir / "Dockerfile.jinja2"
     app_template.write_text('FROM {{ "middle" | resolve_base_image }}')
 
     base = Image(
@@ -214,11 +214,11 @@ def test_extract_dependencies_with_variant(tmp_path):
     # Create main template
     app_dir = tmp_path / "app"
     app_dir.mkdir()
-    main_template = app_dir / "Dockerfile.tpl"
+    main_template = app_dir / "Dockerfile.jinja2"
     main_template.write_text('FROM {{ "base" | resolve_base_image }}')
 
     # Create variant template with different dependency
-    variant_template = app_dir / "Dockerfile.semantic.tpl"
+    variant_template = app_dir / "Dockerfile.semantic.jinja2"
     variant_template.write_text('FROM {{ "builder" | resolve_base_image }}')
 
     from manager.models import Variant
@@ -256,7 +256,7 @@ def test_extract_dependencies_with_extends(tmp_path):
     # Create template without resolve_base_image reference
     app_dir = tmp_path / "app"
     app_dir.mkdir()
-    template = app_dir / "Dockerfile.tpl"
+    template = app_dir / "Dockerfile.jinja2"
     template.write_text("FROM ubuntu:22.04")
 
     image = Image(
@@ -365,17 +365,17 @@ def test_sort_images_simple_chain(tmp_path):
     # Create template files
     base_dir = tmp_path / "base"
     base_dir.mkdir()
-    base_template = base_dir / "Dockerfile.tpl"
+    base_template = base_dir / "Dockerfile.jinja2"
     base_template.write_text('FROM ubuntu:22.04')
 
     middle_dir = tmp_path / "middle"
     middle_dir.mkdir()
-    middle_template = middle_dir / "Dockerfile.tpl"
+    middle_template = middle_dir / "Dockerfile.jinja2"
     middle_template.write_text('FROM {{ "base" | resolve_base_image }}')
 
     app_dir = tmp_path / "app"
     app_dir.mkdir()
-    app_template = app_dir / "Dockerfile.tpl"
+    app_template = app_dir / "Dockerfile.jinja2"
     app_template.write_text('FROM {{ "middle" | resolve_base_image }}')
 
     # Create Image objects
@@ -438,7 +438,7 @@ def test_sort_images_independent_images(tmp_path):
     for i in range(3):
         img_dir = tmp_path / f"image{i}"
         img_dir.mkdir()
-        template = img_dir / "Dockerfile.tpl"
+        template = img_dir / "Dockerfile.jinja2"
         template.write_text('FROM ubuntu:22.04')
 
         images.append(Image(
@@ -468,22 +468,22 @@ def test_sort_images_diamond_dependency(tmp_path):
     # Create template files: app depends on both b and c, which both depend on base
     base_dir = tmp_path / "base"
     base_dir.mkdir()
-    base_template = base_dir / "Dockerfile.tpl"
+    base_template = base_dir / "Dockerfile.jinja2"
     base_template.write_text('FROM ubuntu:22.04')
 
     b_dir = tmp_path / "b"
     b_dir.mkdir()
-    b_template = b_dir / "Dockerfile.tpl"
+    b_template = b_dir / "Dockerfile.jinja2"
     b_template.write_text('FROM {{ "base" | resolve_base_image }}')
 
     c_dir = tmp_path / "c"
     c_dir.mkdir()
-    c_template = c_dir / "Dockerfile.tpl"
+    c_template = c_dir / "Dockerfile.jinja2"
     c_template.write_text('FROM {{ "base" | resolve_base_image }}')
 
     app_dir = tmp_path / "app"
     app_dir.mkdir()
-    app_template = app_dir / "Dockerfile.tpl"
+    app_template = app_dir / "Dockerfile.jinja2"
     app_template.write_text('''
     FROM {{ "b" | resolve_base_image }}
     COPY --from={{ "c" | resolve_base_image }} /app /app
@@ -568,17 +568,17 @@ def test_sort_images_cyclic_dependency(tmp_path):
     # Create circular dependency: a -> b -> c -> a
     a_dir = tmp_path / "a"
     a_dir.mkdir()
-    a_template = a_dir / "Dockerfile.tpl"
+    a_template = a_dir / "Dockerfile.jinja2"
     a_template.write_text('FROM {{ "b" | resolve_base_image }}')
 
     b_dir = tmp_path / "b"
     b_dir.mkdir()
-    b_template = b_dir / "Dockerfile.tpl"
+    b_template = b_dir / "Dockerfile.jinja2"
     b_template.write_text('FROM {{ "c" | resolve_base_image }}')
 
     c_dir = tmp_path / "c"
     c_dir.mkdir()
-    c_template = c_dir / "Dockerfile.tpl"
+    c_template = c_dir / "Dockerfile.jinja2"
     c_template.write_text('FROM {{ "a" | resolve_base_image }}')
 
     images = [
@@ -650,7 +650,7 @@ def test_sort_images_with_missing_dependency(tmp_path):
     # Create an image that references a non-existent base image
     app_dir = tmp_path / "app"
     app_dir.mkdir()
-    app_template = app_dir / "Dockerfile.tpl"
+    app_template = app_dir / "Dockerfile.jinja2"
     # Reference "nonexistent" which is not in our managed images
     app_template.write_text('FROM {{ "nonexistent" | resolve_base_image }}')
 

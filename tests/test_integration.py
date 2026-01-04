@@ -35,8 +35,8 @@ def test_end_to_end_config_to_model():
     assert browser.tags[0].versions["chromium"] == "120.0"
 
     # Verify template paths resolved
-    assert image.template_path.name == "Dockerfile.tpl"
-    assert browser.template_path.name == "Dockerfile.browser.tpl"
+    assert image.template_path.name == "Dockerfile.jinja2"
+    assert browser.template_path.name == "Dockerfile.browser.jinja2"
 
 
 def test_automatic_alias_generation():

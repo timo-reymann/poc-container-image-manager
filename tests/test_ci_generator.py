@@ -8,7 +8,7 @@ from manager.models import Image, Tag, Variant
 def test_build_ci_context_single_image(tmp_path):
     """Test context generation for single image without dependencies."""
     # Create a template file (required for extract_dependencies)
-    template_file = tmp_path / "Dockerfile.tpl"
+    template_file = tmp_path / "Dockerfile.jinja2"
     template_file.write_text('FROM ubuntu:22.04')
 
     image = Image(
@@ -37,11 +37,11 @@ def test_build_ci_context_single_image(tmp_path):
 def test_build_ci_context_with_dependencies(tmp_path):
     """Test context generation with image dependencies."""
     # Create template files that define dependencies
-    base_tpl = tmp_path / "base" / "Dockerfile.tpl"
+    base_tpl = tmp_path / "base" / "Dockerfile.jinja2"
     base_tpl.parent.mkdir()
     base_tpl.write_text("FROM ubuntu:22.04")
 
-    python_tpl = tmp_path / "python" / "Dockerfile.tpl"
+    python_tpl = tmp_path / "python" / "Dockerfile.jinja2"
     python_tpl.parent.mkdir()
     python_tpl.write_text('FROM {{ "base" | resolve_base_image }}')
 
@@ -87,7 +87,7 @@ def test_generate_gitlab_ci(tmp_path):
     from manager.ci_generator import generate_gitlab_ci
 
     # Create a minimal template file for dependency extraction
-    tpl = tmp_path / "src" / "Dockerfile.tpl"
+    tpl = tmp_path / "src" / "Dockerfile.jinja2"
     tpl.parent.mkdir(parents=True)
     tpl.write_text("FROM ubuntu:22.04")
 
@@ -122,11 +122,11 @@ def test_generate_gitlab_ci_with_dependencies(tmp_path):
     import yaml
 
     # Create template files
-    base_tpl = tmp_path / "src" / "base" / "Dockerfile.tpl"
+    base_tpl = tmp_path / "src" / "base" / "Dockerfile.jinja2"
     base_tpl.parent.mkdir(parents=True)
     base_tpl.write_text("FROM ubuntu:22.04")
 
-    python_tpl = tmp_path / "src" / "python" / "Dockerfile.tpl"
+    python_tpl = tmp_path / "src" / "python" / "Dockerfile.jinja2"
     python_tpl.parent.mkdir(parents=True)
     python_tpl.write_text('FROM {{ "base" | resolve_base_image }}')
 

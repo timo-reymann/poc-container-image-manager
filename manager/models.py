@@ -57,7 +57,7 @@ class Image:
     @property
     def test_config_path(self) -> Path:
         """Path to test config template"""
-        return self.path / "test.yml.tpl"
+        return self.path / "test.yml.jinja2"
 
     @property
     def full_qualified_base_image_name(self) -> str | None:

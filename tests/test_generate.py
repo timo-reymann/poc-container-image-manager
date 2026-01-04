@@ -25,8 +25,8 @@ name: test
 tags:
   - name: "1.0"
 """)
-    (version_dir / "Dockerfile.tpl").write_text("FROM base:1.0\nRUN echo hello")
-    (version_dir / "test.yml.tpl").write_text("schemaVersion: '2.0.0'")
+    (version_dir / "Dockerfile.jinja2").write_text("FROM base:1.0\nRUN echo hello")
+    (version_dir / "test.yml.jinja2").write_text("schemaVersion: '2.0.0'")
 
     # Create dist dir
     (tmp_path / "dist").mkdir()
@@ -60,8 +60,8 @@ rootfs_user: "1000:1000"
 tags:
   - name: "1.0"
 """)
-    (images_dir / "Dockerfile.tpl").write_text("FROM base:1.0\nRUN echo hello")
-    (images_dir / "test.yml.tpl").write_text("schemaVersion: '2.0.0'")
+    (images_dir / "Dockerfile.jinja2").write_text("FROM base:1.0\nRUN echo hello")
+    (images_dir / "test.yml.jinja2").write_text("schemaVersion: '2.0.0'")
 
     (tmp_path / "dist").mkdir()
     monkeypatch.chdir(tmp_path)
@@ -83,8 +83,8 @@ name: test
 tags:
   - name: "1.0"
 """)
-    (images_dir / "Dockerfile.tpl").write_text("FROM base:1.0\nRUN echo hello")
-    (images_dir / "test.yml.tpl").write_text("schemaVersion: '2.0.0'")
+    (images_dir / "Dockerfile.jinja2").write_text("FROM base:1.0\nRUN echo hello")
+    (images_dir / "test.yml.jinja2").write_text("schemaVersion: '2.0.0'")
 
     (tmp_path / "dist").mkdir()
     monkeypatch.chdir(tmp_path)
@@ -118,12 +118,12 @@ tags:
   - name: "1.0"
 variants:
   - name: myvariant
-    template: variant.tpl
+    template: variant.jinja2
     tag_suffix: "-myvariant"
 """)
-    (images_dir / "Dockerfile.tpl").write_text("FROM base:1.0\nRUN echo hello")
-    (images_dir / "test.yml.tpl").write_text("schemaVersion: '2.0.0'")
-    (images_dir / "variant.tpl").write_text("FROM test:1.0\nRUN echo variant")
+    (images_dir / "Dockerfile.jinja2").write_text("FROM base:1.0\nRUN echo hello")
+    (images_dir / "test.yml.jinja2").write_text("schemaVersion: '2.0.0'")
+    (images_dir / "variant.jinja2").write_text("FROM test:1.0\nRUN echo variant")
 
     (tmp_path / "dist").mkdir()
     monkeypatch.chdir(tmp_path)

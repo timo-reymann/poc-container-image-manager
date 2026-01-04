@@ -66,7 +66,7 @@ def test_variant_with_aliases():
 
     variant = Variant(
         name="browser",
-        template_path=Path("/fake/Dockerfile.browser.tpl"),
+        template_path=Path("/fake/Dockerfile.browser.jinja2"),
         tags=[tag1],
         aliases={"9-browser": "9.0.100-browser"}
     )
@@ -98,7 +98,7 @@ def test_variant_has_rootfs_fields():
     """Test Variant dataclass has rootfs_user and rootfs_copy"""
     variant = Variant(
         name="browser",
-        template_path=Path("test.tpl"),
+        template_path=Path("test.jinja2"),
         tags=[],
         rootfs_user="0:0",
         rootfs_copy=False
@@ -112,7 +112,7 @@ def test_image_has_rootfs_fields():
     image = Image(
         name="test",
         path=Path("test"),
-        template_path=Path("test.tpl"),
+        template_path=Path("test.jinja2"),
         versions={},
         variables={},
         tags=[],
@@ -140,7 +140,7 @@ rootfs_copy: false
 tags:
   - name: "1.0"
 """)
-    (tmp_path / "Dockerfile.tpl").write_text("FROM base")
+    (tmp_path / "Dockerfile.jinja2").write_text("FROM base")
 
     config = ConfigLoader.load(config_file)
     resolver = ModelResolver()
@@ -167,7 +167,7 @@ tags:
     rootfs_user: "0:0"
     rootfs_copy: false
 """)
-    (tmp_path / "Dockerfile.tpl").write_text("FROM base")
+    (tmp_path / "Dockerfile.jinja2").write_text("FROM base")
 
     config = ConfigLoader.load(config_file)
     resolver = ModelResolver()
@@ -193,8 +193,8 @@ variants:
     tag_suffix: "-slim"
     rootfs_user: "0:0"
 """)
-    (tmp_path / "Dockerfile.tpl").write_text("FROM base")
-    (tmp_path / "Dockerfile.slim.tpl").write_text("FROM base")
+    (tmp_path / "Dockerfile.jinja2").write_text("FROM base")
+    (tmp_path / "Dockerfile.slim.jinja2").write_text("FROM base")
 
     config = ConfigLoader.load(config_file)
     resolver = ModelResolver()

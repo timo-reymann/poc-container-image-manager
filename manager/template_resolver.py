@@ -13,8 +13,8 @@ class TemplateResolver:
         """
         Resolve template path following discovery order:
         1. Explicit template if specified
-        2. Variant-specific template (Dockerfile.{variant}.tpl)
-        3. Default template (Dockerfile.tpl)
+        2. Variant-specific template (Dockerfile.{variant}.jinja2)
+        3. Default template (Dockerfile.jinja2)
 
         Raises FileNotFoundError if no template found.
         """
@@ -30,19 +30,19 @@ class TemplateResolver:
 
         # Try variant-specific
         if variant_name:
-            variant_path = templates_dir / f"Dockerfile.{variant_name}.tpl"
+            variant_path = templates_dir / f"Dockerfile.{variant_name}.jinja2"
             if variant_path.exists():
                 return variant_path
 
         # Fall back to default
-        default_path = templates_dir / "Dockerfile.tpl"
+        default_path = templates_dir / "Dockerfile.jinja2"
         if default_path.exists():
             return default_path
 
         # Nothing found
-        searched = ["Dockerfile.tpl"]
+        searched = ["Dockerfile.jinja2"]
         if variant_name:
-            searched.insert(0, f"Dockerfile.{variant_name}.tpl")
+            searched.insert(0, f"Dockerfile.{variant_name}.jinja2")
 
         raise FileNotFoundError(
             f"Template not found. Searched in {templates_dir}: {', '.join(searched)}"
