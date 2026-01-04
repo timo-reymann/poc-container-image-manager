@@ -34,7 +34,8 @@ uv run image-manager <command> [args]
 ```
 
 Commands:
-- `generate` - Generate Dockerfiles and test configs from `images/`
+- `generate [--no-lock]` - Generate Dockerfiles and test configs from `images/`
+- `lock <image:tag>` - Generate packages.lock with pinned versions and digest
 - `build [image:tag] [options]` - Build image(s) to `dist/<name>/<tag>/image.tar`
 - `manifest <image:tag>` - Create multi-platform manifest from registry images
 - `sbom [image:tag] [--format FORMAT]` - Generate SBOM for image(s)
@@ -307,6 +308,164 @@ The `manifest` command:
 - **Rootfs file injection** - Copy static files into images with layered merging
 - Integration with container-structure-test for testing containers
 - **S3-based build caching** - Uses Garage for fast incremental builds
+- **Reproducible builds** - Package version locking and base image digest pinning
+
+## Reproducible Builds
+
+> **POC Goal**: Demonstrate how to achieve deterministic, reproducible container builds where the same source always produces the same image.
+
+Container builds are inherently non-deterministic: `apt-get install curl` fetches whatever version is current, `FROM ubuntu:24.04` resolves to different digests over time, and file timestamps vary between builds. This POC includes features to address these issues.
+
+### Quick Start
+
+```shell
+# 1. Generate Dockerfiles (without locking)
+uv run image-manager generate
+
+# 2. Create lock file with pinned versions and digest
+uv run image-manager lock base:2025.09
+
+# 3. Regenerate with pinning applied
+uv run image-manager generate
+
+# 4. Build reproducibly
+uv run image-manager build base:2025.09
+```
+
+### What Gets Pinned
+
+The `lock` command creates a `packages.lock` file that pins:
+
+**Package versions** - Resolves current versions from packages.ubuntu.com:
+```yaml
+packages:
+  curl: 8.5.0-2ubuntu10.6
+  git: 1:2.43.0-1ubuntu7.3
+```
+
+**Base image digest** - Resolves the current SHA256 digest:
+```yaml
+_meta:
+  base:
+    original: ubuntu:24.04
+    digest: sha256:c35e29c9450151419d9448b0fd75374fec4fff364a27f176fb458d472dfc9e54
+```
+
+### Generated Dockerfile Comparison
+
+**Without lock file:**
+```dockerfile
+FROM ubuntu:24.04
+RUN apt-get install -y curl git
+```
+
+**With lock file:**
+```dockerfile
+FROM ubuntu@sha256:c35e29c9450151419d9448b0fd75374fec4fff364a27f176fb458d472dfc9e54
+RUN apt-get install -y curl=8.5.0-2ubuntu10.6 git=1:2.43.0-1ubuntu7.3
+```
+
+### Build-Time Determinism
+
+The build system also applies:
+
+- **SOURCE_DATE_EPOCH** - Fixed timestamp (2026-01-01) for reproducible layer metadata
+- **rewrite-timestamp** - Normalizes file timestamps in layers
+
+### Commands
+
+```shell
+# Generate lock file (creates packages.lock in image source directory)
+uv run image-manager lock base:2025.09
+
+# Generate with locking (default - applies lock file if present)
+uv run image-manager generate
+
+# Generate without locking (ignores lock file, no warnings)
+uv run image-manager generate --no-lock
+```
+
+### Workflow Options
+
+#### Option 1: Full Reproducibility (Recommended for Production)
+
+Commit the `packages.lock` file to version control. Builds are fully reproducible.
+
+```shell
+# Initial setup (or when updating dependencies)
+uv run image-manager generate
+uv run image-manager lock base:2025.09
+uv run image-manager generate
+git add images/base/ubuntu/packages.lock
+git commit -m "Lock package versions"
+
+# Subsequent builds (deterministic)
+uv run image-manager generate
+uv run image-manager build
+```
+
+**Trade-offs:**
+- ✅ Identical builds across time and machines
+- ✅ Security: know exactly what's in the image
+- ❌ Manual effort to update lock file
+- ❌ Won't automatically get security patches
+
+#### Option 2: No Locking (Simpler, Less Reproducible)
+
+Don't create a lock file. Builds use latest available versions.
+
+```shell
+uv run image-manager generate
+uv run image-manager build
+```
+
+A warning is printed:
+```
+Warning: No packages.lock for base, build may not be reproducible
+```
+
+**Trade-offs:**
+- ✅ Always get latest packages (including security updates)
+- ✅ No maintenance overhead
+- ❌ Builds may differ over time
+- ❌ Harder to debug issues ("it worked yesterday")
+
+#### Option 3: Selective Locking
+
+Use `--no-lock` to temporarily bypass locking for testing:
+
+```shell
+# Test with latest packages
+uv run image-manager generate --no-lock
+uv run image-manager build
+
+# Return to locked versions
+uv run image-manager generate
+```
+
+### Updating Locked Versions
+
+To update to current versions:
+
+```shell
+# Delete existing lock file
+rm images/base/ubuntu/packages.lock
+
+# Regenerate without pinning
+uv run image-manager generate --no-lock
+
+# Create new lock file with current versions
+uv run image-manager lock base:2025.09
+
+# Regenerate with new pins
+uv run image-manager generate
+```
+
+### Limitations
+
+- **Ubuntu only** - Package version resolution currently only supports Ubuntu-based images (uses packages.ubuntu.com)
+- **Binary packages** - Resolves binary package versions, not source packages
+- **No transitive locking** - Only explicitly installed packages are locked, not their dependencies
 
 ## Missing features
 
