@@ -6,4 +6,4 @@ bin/**/rootlesskit filter=lfs diff=lfs merge=lfs -text
 
 # Syntax highlighting for Jinja2 templates
 Dockerfile.jinja2 linguist-language=Dockerfile
-*.yml.jinja2 linguist-language=YAML
+test.yml.jinja2 linguist-language=YAML
