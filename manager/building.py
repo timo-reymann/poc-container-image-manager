@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 import docker
-from manager.config import get_registry_url, get_registry_auth, get_registries, get_push_registry
+from manager.config import get_registry_url, get_registry_auth, get_registries, get_push_registry, get_cache_config
 from manager.rendering import generate_tag_report
 from docker.errors import NotFound, APIError
 
@@ -29,15 +29,8 @@ REGISTRY_CONTAINER_NAME = "image-manager-registry"
 REGISTRY_PORT = 5050  # Using 5050 to avoid conflict with AirPlay on macOS
 REGISTRY_IMAGE = "registry:2"
 
-# Garage for S3-compatible build cache
+# Garage S3 port for connection checking (local development)
 GARAGE_S3_PORT = 3900
-GARAGE_RPC_PORT = 3901
-GARAGE_ADMIN_PORT = 3903
-GARAGE_BUCKET = "buildkit-cache"
-GARAGE_REGION = "garage"
-# Fixed credentials matching infrastructure/garage-init.sh (must be valid hex)
-GARAGE_ACCESS_KEY_ID = "GK31337cafe000000000000000"
-GARAGE_SECRET_KEY = "1337cafe0000000000000000000000000000000000000000000000000000dead"
 
 # Platform support
 SUPPORTED_PLATFORMS = ["linux/amd64", "linux/arm64"]
@@ -453,28 +446,55 @@ def login_to_all_registries() -> None:
 
 # --- Garage (S3 cache) ---
 
-def get_garage_s3_endpoint() -> str:
-    """Get the Garage S3 endpoint URL."""
-    return f"http://localhost:{GARAGE_S3_PORT}"
-
-
-def get_garage_s3_endpoint_for_buildkit() -> str:
-    """Get the Garage S3 endpoint as seen by buildkitd.
+def get_cache_endpoint_for_buildkit() -> str | None:
+    """Get the S3 cache endpoint as seen by buildkitd.
 
     On macOS, buildkitd runs in a container and needs host.docker.internal.
     On Linux, buildkitd runs natively and can use localhost.
+
+    Returns None if caching is disabled.
     """
+    cache = get_cache_config()
+    if not cache:
+        return None
+
+    endpoint = cache.endpoint
+
+    # For local development (localhost), adjust for macOS container
     if platform.system().lower() == "darwin":
-        return f"http://host.docker.internal:{GARAGE_S3_PORT}"
-    return f"http://localhost:{GARAGE_S3_PORT}"
+        if "localhost" in endpoint or "127.0.0.1" in endpoint:
+            # Replace localhost with host.docker.internal for container access
+            endpoint = endpoint.replace("localhost", "host.docker.internal")
+            endpoint = endpoint.replace("127.0.0.1", "host.docker.internal")
+
+    return endpoint
 
 
-def check_garage_connection() -> bool:
-    """Check if garage S3 endpoint is reachable."""
+def check_cache_connection() -> bool:
+    """Check if S3 cache endpoint is reachable."""
+    cache = get_cache_config()
+    if not cache:
+        return False
+
+    # Parse endpoint to extract host and port
+    endpoint = cache.endpoint
     try:
+        # Remove protocol
+        if "://" in endpoint:
+            endpoint = endpoint.split("://")[1]
+        # Split host and port
+        if ":" in endpoint:
+            host, port_str = endpoint.split(":", 1)
+            # Remove any path
+            port_str = port_str.split("/")[0]
+            port = int(port_str)
+        else:
+            host = endpoint.split("/")[0]
+            port = 443 if cache.endpoint.startswith("https") else 80
+
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(1)
-        result = sock.connect_ex(('localhost', GARAGE_S3_PORT))
+        result = sock.connect_ex((host, port))
         sock.close()
         return result == 0
     except Exception:
@@ -739,12 +759,15 @@ def run_build_platform(
     # Build cache arguments
     cache_args = []
     if use_cache:
-        s3_endpoint = get_garage_s3_endpoint_for_buildkit()
-        cache_name = f"{image_ref.split(':')[0]}-{platform_path}"
-        cache_args = [
-            "--export-cache", f"type=s3,endpoint_url={s3_endpoint},bucket={GARAGE_BUCKET},region={GARAGE_REGION},name={cache_name},access_key_id={GARAGE_ACCESS_KEY_ID},secret_access_key={GARAGE_SECRET_KEY},use_path_style=true,mode=max",
-            "--import-cache", f"type=s3,endpoint_url={s3_endpoint},bucket={GARAGE_BUCKET},region={GARAGE_REGION},name={cache_name},access_key_id={GARAGE_ACCESS_KEY_ID},secret_access_key={GARAGE_SECRET_KEY},use_path_style=true",
-        ]
+        cache = get_cache_config()
+        s3_endpoint = get_cache_endpoint_for_buildkit()
+        if cache and s3_endpoint:
+            cache_name = f"{image_ref.split(':')[0]}-{platform_path}"
+            path_style = "true" if cache.use_path_style else "false"
+            cache_args = [
+                "--export-cache", f"type=s3,endpoint_url={s3_endpoint},bucket={cache.bucket},region={cache.region},name={cache_name},access_key_id={cache.access_key},secret_access_key={cache.secret_key},use_path_style={path_style},mode=max",
+                "--import-cache", f"type=s3,endpoint_url={s3_endpoint},bucket={cache.bucket},region={cache.region},name={cache_name},access_key_id={cache.access_key},secret_access_key={cache.secret_key},use_path_style={path_style}",
+            ]
 
     # Rewrite FROM for local base images
     dockerfile_path = context_path / "Dockerfile"
@@ -975,8 +998,8 @@ def run_build(
     # Log in to all configured registries (for pulling and pushing)
     login_to_all_registries()
 
-    if use_cache and not check_garage_connection():
-        print("Warning: Garage not reachable, building without cache", file=sys.stderr)
+    if use_cache and not check_cache_connection():
+        print("Warning: S3 cache not reachable, building without cache", file=sys.stderr)
         use_cache = False
 
     # Normalize platforms

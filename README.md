@@ -138,6 +138,35 @@ registries:
 
 If no config file exists, defaults to `localhost:5050`.
 
+### S3 Build Cache
+
+Configure an external S3-compatible cache for shared layer caching between local and CI builds:
+
+```yaml
+cache:
+  endpoint: ${S3_ENDPOINT}           # e.g., https://s3.amazonaws.com
+  bucket: ${S3_BUCKET}               # e.g., my-buildkit-cache
+  access_key: ${AWS_ACCESS_KEY_ID}
+  secret_key: ${AWS_SECRET_ACCESS_KEY}
+  region: us-east-1                  # optional, default: us-east-1
+  use_path_style: true               # optional, default: true (for MinIO/Garage)
+```
+
+**Cache configuration:**
+- `endpoint`: S3-compatible endpoint URL
+- `bucket`: Bucket name for storing cache layers
+- `access_key`: AWS access key ID (supports `${ENV_VAR}` expansion)
+- `secret_key`: AWS secret access key (supports `${ENV_VAR}` expansion)
+- `region`: AWS region (optional, default: `us-east-1`)
+- `use_path_style`: Use path-style URLs (optional, default: `true` for MinIO/Garage compatibility)
+
+To disable caching entirely:
+```yaml
+cache: false
+```
+
+If no cache config is provided, defaults to local Garage instance at `localhost:3900`.
+
 ### Infrastructure setup
 
 Start the infrastructure services (registry, cache):
@@ -485,11 +514,10 @@ uv run image-manager generate
 - **Binary packages** - Resolves binary package versions, not source packages
 - **No transitive locking** - Only explicitly installed packages are locked, not their dependencies
 
-## Missing features
+## Future enhancements
 
-- Configurable external S3 endpoint and credentials
-- CI pipeline generation (GitHub Actions, GitLab CI, etc.)
-- More intelligent version parsing and sorting (potentially via strategy that can be specified)
+- CI pipeline generation (GitHub Actions, GitLab CI templates)
+- Pluggable version parsing strategies for non-semver tags (e.g., Ubuntu's `24.04`, date-based `2025.09`)
 
 ## Open questions
 

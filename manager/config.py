@@ -250,6 +250,99 @@ def get_registry_auth_for(registry_url: str) -> tuple[str, str] | None:
     return None
 
 
+# --- S3 Cache Configuration ---
+
+class CacheConfig:
+    """Configuration for S3-compatible build cache."""
+
+    def __init__(
+        self,
+        endpoint: str,
+        bucket: str,
+        access_key: str,
+        secret_key: str,
+        region: str = "us-east-1",
+        use_path_style: bool = True,
+    ):
+        self.endpoint = endpoint
+        self.bucket = bucket
+        self.access_key = access_key
+        self.secret_key = secret_key
+        self.region = region
+        self.use_path_style = use_path_style
+
+
+# Default local Garage configuration (for development)
+DEFAULT_CACHE_ENDPOINT = "http://localhost:3900"
+DEFAULT_CACHE_BUCKET = "buildkit-cache"
+DEFAULT_CACHE_REGION = "garage"
+DEFAULT_CACHE_ACCESS_KEY = "GK31337cafe000000000000000"
+DEFAULT_CACHE_SECRET_KEY = "1337cafe0000000000000000000000000000000000000000000000000000dead"
+
+
+def get_cache_config() -> CacheConfig | None:
+    """Get S3 cache configuration.
+
+    Returns CacheConfig if cache is configured, None if caching is disabled.
+
+    Configuration format in .image-manager.yml:
+        cache:
+          endpoint: ${S3_ENDPOINT}
+          bucket: ${S3_BUCKET}
+          access_key: ${AWS_ACCESS_KEY_ID}
+          secret_key: ${AWS_SECRET_ACCESS_KEY}
+          region: us-east-1  # optional, default: us-east-1
+          use_path_style: true  # optional, default: true
+
+    Set 'cache: false' or omit to use local Garage defaults.
+    """
+    config = load_config()
+
+    cache_config = config.get("cache")
+
+    # Explicitly disabled
+    if cache_config is False:
+        return None
+
+    # No config or empty - use local defaults
+    if not cache_config or not isinstance(cache_config, dict):
+        return CacheConfig(
+            endpoint=DEFAULT_CACHE_ENDPOINT,
+            bucket=DEFAULT_CACHE_BUCKET,
+            access_key=DEFAULT_CACHE_ACCESS_KEY,
+            secret_key=DEFAULT_CACHE_SECRET_KEY,
+            region=DEFAULT_CACHE_REGION,
+        )
+
+    # External S3 configuration
+    endpoint = expand_env_vars(cache_config.get("endpoint"))
+    bucket = expand_env_vars(cache_config.get("bucket"))
+    access_key = expand_env_vars(cache_config.get("access_key"))
+    secret_key = expand_env_vars(cache_config.get("secret_key"))
+    region = expand_env_vars(cache_config.get("region")) or "us-east-1"
+    use_path_style = cache_config.get("use_path_style", True)
+
+    # All required fields must be present
+    if not all([endpoint, bucket, access_key, secret_key]):
+        print("Warning: Incomplete cache config, using local defaults")
+        return CacheConfig(
+            endpoint=DEFAULT_CACHE_ENDPOINT,
+            bucket=DEFAULT_CACHE_BUCKET,
+            access_key=DEFAULT_CACHE_ACCESS_KEY,
+            secret_key=DEFAULT_CACHE_SECRET_KEY,
+            region=DEFAULT_CACHE_REGION,
+        )
+
+    return CacheConfig(
+        endpoint=endpoint,
+        bucket=bucket,
+        access_key=access_key,
+        secret_key=secret_key,
+        region=region,
+        use_path_style=use_path_style,
+    )
+
+
 class TagConfig(BaseModel):
     """Configuration for a single tag"""
     name: str
