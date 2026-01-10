@@ -860,7 +860,7 @@ def run_build_platform(
         "--opt", f"label:org.opencontainers.image.ref.name={image_name}",
         "--opt", f"label:org.opencontainers.image.version={image_tag}",
         "--opt", f"label:org.opencontainers.image.title={image_name}",
-        "--opt", f"label:org.opencontainers.image.created={datetime.fromtimestamp(int(SOURCE_DATE_EPOCH), tz=timezone.utc).isoformat()}",
+        "--opt", f"label:org.opencontainers.image.created={datetime.now(tz=timezone.utc).isoformat()}",
     ]
 
     # Add git revision if available
