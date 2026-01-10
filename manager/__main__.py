@@ -9,7 +9,7 @@ from manager.models import ModelResolver
 from manager.rendering import RenderContext, render_dockerfile, render_test_config, generate_image_report
 from manager.dependency_graph import sort_images, extract_dependencies, CyclicDependencyError
 from manager.rootfs import collect_rootfs_paths, merge_rootfs, has_rootfs_content, warn_sensitive_files
-from manager.locking import read_lock_file, read_base_digest, rewrite_apt_install, rewrite_from_digest
+from manager.locking import read_lock_file, read_base_digest, rewrite_apt_install, rewrite_from_digest, extract_base_image
 
 
 def print_usage() -> None:
@@ -231,11 +231,15 @@ def cmd_generate(args: list[str]) -> int:
 
             # Apply lock file if enabled and exists
             if use_lock and has_lock:
-                locked_packages = read_lock_file(lock_path)
+                # Determine base ref from rendered Dockerfile
+                base_info = extract_base_image(rendered_dockerfile)
+                base_ref = f"{base_info[0]}:{base_info[1]}" if base_info else None
+
+                locked_packages = read_lock_file(lock_path, base_ref)
                 if locked_packages:
                     rendered_dockerfile = rewrite_apt_install(rendered_dockerfile, locked_packages)
 
-                base_digest_info = read_base_digest(lock_path)
+                base_digest_info = read_base_digest(lock_path, base_ref)
                 if base_digest_info:
                     original_ref, digest = base_digest_info
                     rendered_dockerfile = rewrite_from_digest(rendered_dockerfile, original_ref, digest)
@@ -279,11 +283,15 @@ def cmd_generate(args: list[str]) -> int:
                 # Apply lock file if enabled and exists
                 # Variants use the same lock file as the base image
                 if use_lock and has_lock:
-                    locked_packages = read_lock_file(lock_path)
+                    # Determine base ref from rendered Dockerfile
+                    base_info = extract_base_image(rendered_dockerfile)
+                    base_ref = f"{base_info[0]}:{base_info[1]}" if base_info else None
+
+                    locked_packages = read_lock_file(lock_path, base_ref)
                     if locked_packages:
                         rendered_dockerfile = rewrite_apt_install(rendered_dockerfile, locked_packages)
 
-                    base_digest_info = read_base_digest(lock_path)
+                    base_digest_info = read_base_digest(lock_path, base_ref)
                     if base_digest_info:
                         original_ref, digest = base_digest_info
                         rendered_dockerfile = rewrite_from_digest(rendered_dockerfile, original_ref, digest)

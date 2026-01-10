@@ -295,11 +295,13 @@ def resolve_ubuntu_version(dockerfile_path: Path, images_dir: Path, lock_path: P
     return None
 
 
-def read_lock_file(lock_path: Path) -> dict[str, str]:
+def read_lock_file(lock_path: Path, base_ref: str | None = None) -> dict[str, str]:
     """Read packages.lock file.
 
     Args:
         lock_path: Path to packages.lock
+        base_ref: Base image ref to look up (e.g., 'ubuntu:24.04'). If None, returns
+                  packages from legacy format or first base section.
 
     Returns:
         Dict of package -> version
@@ -308,14 +310,30 @@ def read_lock_file(lock_path: Path) -> dict[str, str]:
         return {}
 
     data = yaml.safe_load(lock_path.read_text())
-    return data.get("packages", {}) if data else {}
+    if not data:
+        return {}
+
+    # New multi-base format
+    if "bases" in data:
+        bases = data["bases"]
+        if base_ref and base_ref in bases:
+            return bases[base_ref].get("packages", {})
+        # Return first base's packages if no specific base requested
+        if bases:
+            first_base = next(iter(bases.values()))
+            return first_base.get("packages", {})
+        return {}
+
+    # Legacy single-base format
+    return data.get("packages", {})
 
 
-def read_base_digest(lock_path: Path) -> tuple[str, str] | None:
+def read_base_digest(lock_path: Path, base_ref: str | None = None) -> tuple[str, str] | None:
     """Read base image digest from lock file.
 
     Args:
         lock_path: Path to packages.lock
+        base_ref: Base image ref to look up (e.g., 'ubuntu:24.04')
 
     Returns:
         Tuple of (original_ref, digest) or None if not available
@@ -327,6 +345,17 @@ def read_base_digest(lock_path: Path) -> tuple[str, str] | None:
     if not data:
         return None
 
+    # New multi-base format
+    if "bases" in data:
+        bases = data["bases"]
+        if base_ref and base_ref in bases:
+            base_info = bases[base_ref]
+            digest = base_info.get("digest")
+            if digest:
+                return (base_ref, digest)
+        return None
+
+    # Legacy single-base format
     meta = data.get("_meta", {})
     base = meta.get("base")
 
@@ -339,37 +368,44 @@ def read_base_digest(lock_path: Path) -> tuple[str, str] | None:
     return None
 
 
-def write_lock_file(
-    lock_path: Path,
-    packages: dict[str, str],
-    base_image: str,
-    base_digest: str | None,
-    codename: str,
-) -> None:
-    """Write packages.lock file.
+def read_all_bases(lock_path: Path) -> dict[str, dict]:
+    """Read all base sections from lock file.
 
     Args:
         lock_path: Path to packages.lock
-        packages: Dict of package -> version
-        base_image: Base image reference
-        base_digest: Digest of base image (sha256:...)
-        codename: Ubuntu codename
+
+    Returns:
+        Dict of base_ref -> {digest, codename, packages}
+    """
+    if not lock_path.exists():
+        return {}
+
+    data = yaml.safe_load(lock_path.read_text())
+    if not data:
+        return {}
+
+    return data.get("bases", {})
+
+
+def write_lock_file(
+    lock_path: Path,
+    bases: dict[str, dict],
+) -> None:
+    """Write packages.lock file with multiple base sections.
+
+    Args:
+        lock_path: Path to packages.lock
+        bases: Dict of base_ref -> {digest, codename, packages}
     """
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-
-    base_info: dict[str, str] = {"original": base_image}
-    if base_digest:
-        base_info["digest"] = base_digest
 
     content = {
         "_meta": {
             "generated_by": "image-manager lock",
             "source": "packages.ubuntu.com",
-            "base": base_info,
-            "codename": codename,
             "date": datetime.now(timezone.utc).isoformat(),
         },
-        "packages": packages,
+        "bases": bases,
     }
 
     lock_path.write_text(yaml.dump(content, default_flow_style=False, sort_keys=False))
@@ -428,12 +464,41 @@ def rewrite_from_digest(
     return re.sub(pattern, replacement, dockerfile_content, flags=re.MULTILINE | re.IGNORECASE)
 
 
+def _get_base_ref(dockerfile_path: Path, dist_dir: Path) -> str | None:
+    """Get the effective base image reference for a Dockerfile.
+
+    For local images (like 'base:2025.09'), follows the chain to find ubuntu.
+    Returns a normalized ref like 'ubuntu:24.04'.
+    """
+    content = dockerfile_path.read_text()
+    base = extract_base_image(content)
+    if not base:
+        return None
+
+    image, tag = base
+
+    # Direct ubuntu reference
+    if image == "ubuntu":
+        # Strip digest if present
+        if tag.startswith("sha256:"):
+            return None  # Can't determine version from digest alone
+        return f"ubuntu:{tag}"
+
+    # Local image - check its base
+    if "/" not in image and image not in ("alpine", "debian"):
+        base_dockerfile = dist_dir / image / tag / "Dockerfile"
+        if base_dockerfile.exists():
+            return _get_base_ref(base_dockerfile, dist_dir)
+
+    return None
+
+
 def run_lock(
     image_refs: list[str],
     images_dir: Path,
     dist_dir: Path,
 ) -> int:
-    """Generate packages.lock for an image, aggregating packages from all tags.
+    """Generate packages.lock for an image, with sections per base.
 
     Args:
         image_refs: List of image references for the same image (e.g., ['python:3.13.7', 'python:3.13.6'])
@@ -463,57 +528,77 @@ def run_lock(
 
     lock_path = image_dir / "packages.lock"
 
-    # Find first valid Dockerfile to determine Ubuntu version
-    dockerfile_path = None
+    # Group tags by their base image
+    base_to_tags: dict[str, list[str]] = {}
     for ref in image_refs:
         tag = ref.split(":")[1]
-        path = dist_dir / name / tag / "Dockerfile"
-        if path.exists():
-            dockerfile_path = path
-            break
+        dockerfile_path = dist_dir / name / tag / "Dockerfile"
+        if not dockerfile_path.exists():
+            continue
 
-    if not dockerfile_path:
-        print(f"Error: No generated Dockerfile found for {name}")
-        print("Run 'image-manager generate' first")
+        base_ref = _get_base_ref(dockerfile_path, dist_dir)
+        if not base_ref:
+            print(f"  Warning: Could not determine base for {ref}, skipping")
+            continue
+
+        if base_ref not in base_to_tags:
+            base_to_tags[base_ref] = []
+        base_to_tags[base_ref].append(tag)
+
+    if not base_to_tags:
+        print(f"Error: No valid Dockerfiles found for {name}")
         return 1
 
-    # Resolve Ubuntu version
-    ubuntu_info = resolve_ubuntu_version(dockerfile_path, images_dir, lock_path)
-    if not ubuntu_info:
-        print(f"Error: Could not determine Ubuntu version for {name}")
-        print("Package locking currently only supports Ubuntu-based images")
-        return 1
+    print(f"Found {len(base_to_tags)} base image(s):")
+    for base_ref, tags in base_to_tags.items():
+        print(f"  {base_ref}: {len(tags)} tags")
 
-    ubuntu_version, codename = ubuntu_info
-    print(f"Detected Ubuntu {ubuntu_version} ({codename})")
+    # Check for existing lock data
+    existing_bases = read_all_bases(lock_path)
 
-    # Check if lock file already has packages (use existing versions)
-    existing_packages = read_lock_file(lock_path)
-    if existing_packages:
-        print(f"Using {len(existing_packages)} existing locked packages")
-        locked = existing_packages
-    else:
-        # Extract packages from ALL tag Dockerfiles
+    # Build lock sections per base
+    bases_data: dict[str, dict] = {}
+
+    for base_ref, tags in base_to_tags.items():
+        print(f"\nProcessing {base_ref}...")
+
+        # Get Ubuntu version from base ref
+        ubuntu_version = base_ref.split(":")[1]
+        try:
+            codename = get_ubuntu_codename(ubuntu_version)
+        except ValueError as e:
+            print(f"  Error: {e}")
+            continue
+
+        print(f"  Ubuntu {ubuntu_version} ({codename})")
+
+        # Check existing packages for this base
+        if base_ref in existing_bases:
+            existing_packages = existing_bases[base_ref].get("packages", {})
+            if existing_packages:
+                print(f"  Using {len(existing_packages)} existing locked packages")
+                bases_data[base_ref] = existing_bases[base_ref]
+                continue
+
+        # Extract packages from all tags using this base
         all_packages = set()
-        for ref in image_refs:
-            tag = ref.split(":")[1]
+        for tag in tags:
             path = dist_dir / name / tag / "Dockerfile"
             if path.exists():
                 content = path.read_text()
                 packages = extract_packages_from_dockerfile(content)
                 if packages:
-                    print(f"  {tag}: {len(packages)} packages")
                     all_packages.update(packages)
 
         if not all_packages:
-            print("No apt-get install commands found in any Dockerfile")
-            return 0
+            print(f"  No packages found for {base_ref}")
+            continue
 
         packages = sorted(all_packages)
-        print(f"Total unique packages: {len(packages)}")
+        print(f"  {len(packages)} unique packages")
 
         # Resolve versions in parallel
-        print("  Resolving package versions...")
+        print("  Resolving versions...")
         locked = {}
         not_found = []
 
@@ -526,27 +611,28 @@ def run_lock(
                 pkg, version = future.result()
                 if version:
                     locked[pkg] = version
-                    print(f"    {pkg}: {version}")
                 else:
                     not_found.append(pkg)
 
         if not_found:
             print(f"  Not found: {', '.join(not_found)}")
 
-        if not locked:
-            print("Error: Could not resolve any package versions")
-            return 1
+        # Resolve digest
+        digest = resolve_image_digest(base_ref)
+        if digest:
+            print(f"  Digest: {digest[:19]}...")
 
-    # Resolve base image digest
-    base_image_ref = f"ubuntu:{ubuntu_version}"
-    print(f"Resolving digest for {base_image_ref}...", end=" ", flush=True)
-    base_digest = resolve_image_digest(base_image_ref)
-    if base_digest:
-        print(f"{base_digest[:19]}...")
-    else:
-        print("FAILED (will use tag only)")
+        bases_data[base_ref] = {
+            "digest": digest,
+            "codename": codename,
+            "packages": locked,
+        }
 
-    write_lock_file(lock_path, locked, base_image_ref, base_digest, codename)
+    if not bases_data:
+        print("Error: Could not resolve any packages")
+        return 1
+
+    write_lock_file(lock_path, bases_data)
     print(f"\nWrote {lock_path}")
 
     return 0

@@ -1,14 +1,16 @@
 _meta:
   generated_by: image-manager lock
   source: packages.ubuntu.com
-  base:
-    original: ubuntu:24.04
+  date: '2026-01-10T14:45:34.296822+00:00'
+bases:
+  ubuntu:24.04:
     digest: sha256:c35e29c9450151419d9448b0fd75374fec4fff364a27f176fb458d472dfc9e54
-  codename: noble
-  date: '2026-01-10T14:39:12.106284+00:00'
-packages:
-  gnupg: 2.4.4-2ubuntu17.4
-  ca-certificates: '20240203'
-  curl: 8.5.0-2ubuntu10.6
-  git: 1:2.43.0-1ubuntu7.3
-  unzip: 6.0-28ubuntu4.1
+    codename: noble
+    packages:
+      wget: 1.21.4-1ubuntu4.1
+      unzip: 6.0-28ubuntu4.1
+      zip: 3.0-13build1
+      curl: 8.5.0-2ubuntu10.6
+      ca-certificates: '20240203'
+      gnupg: 2.4.4-2ubuntu17.4
+      git: 1:2.43.0-1ubuntu7.3
