@@ -421,7 +421,16 @@ def _get_base_ref(dockerfile_path: Path, dist_dir: Path) -> str | None:
     # Direct ubuntu reference
     if image == "ubuntu":
         if tag.startswith("sha256:"):
-            return None  # Can't determine version from digest alone
+            # Digest reference - use syft on this image's tar to get version
+            # The tar is in the same directory as the Dockerfile
+            image_tar = dockerfile_path.parent / "image.tar"
+            if image_tar.exists():
+                distro = extract_distro_from_image(image_tar)
+                if distro and distro.get("id") == "ubuntu":
+                    version = distro.get("versionID")
+                    if version:
+                        return f"ubuntu:{version}"
+            return None
         return f"ubuntu:{tag}"
 
     # Local image - use syft to inspect the built image tar
