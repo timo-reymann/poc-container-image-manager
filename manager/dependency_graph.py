@@ -121,10 +121,17 @@ def sort_images(images: list) -> list:
     # Perform topological sort to get names in build order
     sorted_names = topological_sort(dependencies)
 
-    # Create a mapping from name to image for quick lookup
-    image_map = {image.name: image for image in images}
+    # Create a mapping from name to list of images (multiple image.yml can have same name)
+    image_map: dict[str, list] = {}
+    for image in images:
+        if image.name not in image_map:
+            image_map[image.name] = []
+        image_map[image.name].append(image)
 
-    # Map sorted names back to Image objects
-    sorted_images = [image_map[name] for name in sorted_names if name in image_map]
+    # Map sorted names back to Image objects (include all images with same name)
+    sorted_images = []
+    for name in sorted_names:
+        if name in image_map:
+            sorted_images.extend(image_map[name])
 
     return sorted_images
