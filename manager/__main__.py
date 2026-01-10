@@ -18,15 +18,20 @@ def print_usage() -> None:
     print()
     print("Commands:")
     print("  generate            Generate Dockerfiles and test configs from images/")
-    print("  lock [image:tag]    Generate packages.lock with pinned versions")
-    print("  build [image:tag]   Build an image (or all images if none specified)")
-    print("  manifest <image:tag> Create multi-platform manifest from registry images")
-    print("  sbom [image:tag]    Generate SBOM for an image (or all images)")
-    print("  test [image:tag]    Test an image (or all images if none specified)")
+    print("  lock [target]       Generate packages.lock with pinned versions")
+    print("  build [target]      Build an image (or all images if none specified)")
+    print("  manifest <target>   Create multi-platform manifest from registry images")
+    print("  sbom [target]       Generate SBOM for an image (or all images)")
+    print("  test [target]       Test an image (or all images if none specified)")
+    print()
     print("  start [daemon]      Start daemons (buildkitd, dind, or all)")
     print("  stop [daemon]       Stop daemons (buildkitd, dind, or all)")
     print("  status [daemon]     Check daemon status")
     print("  generate-ci         Generate CI configuration (default: gitlab)")
+    print()
+    print("Target can be:")
+    print("  <image>             All tags for image (e.g., 'base', 'dotnet')")
+    print("  <image:tag>         Specific tag (e.g., 'base:2025.09', 'dotnet:9.0.100')")
     print()
     print("Options (generate, build, sbom, test):")
     print("  --snapshot-id ID    Use snapshot ID for MR/branch builds")
@@ -53,13 +58,14 @@ def print_usage() -> None:
     print()
     print("Examples:")
     print("  image-manager generate")
-    print("  image-manager build                            # Build for main (release tags)")
+    print("  image-manager build                            # Build all images")
+    print("  image-manager build base                       # Build all tags for base image")
+    print("  image-manager build base:2025.09               # Build specific tag")
+    print("  image-manager build base dotnet                # Build all tags for base and dotnet")
     print("  image-manager build --no-cache                 # Build without cache")
-    print("  image-manager sbom base:2025.09                # Generate SBOM for image")
-    print("  image-manager sbom --format spdx-json          # Generate SPDX SBOM")
-    print("  image-manager generate --snapshot-id mr-123    # Generate for MR")
-    print("  image-manager build --snapshot-id mr-123       # Build for MR (snapshot tags)")
-    print("  image-manager test --snapshot-id mr-123        # Test MR build")
+    print("  image-manager sbom base:2025.09                # Generate SBOM for specific tag")
+    print("  image-manager sbom dotnet                      # Generate SBOM for all dotnet tags")
+    print("  image-manager test base                        # Test all base image tags")
     print("  image-manager start")
     print("  image-manager status")
 
@@ -89,6 +95,45 @@ def get_all_image_refs() -> list[str]:
                 refs.append(f"{image.name}:{variant_tag.name}")
 
     return refs
+
+
+def expand_image_refs(refs: list[str]) -> list[str]:
+    """Expand image references, converting image names to all their tags.
+
+    Args:
+        refs: List of image refs (can be 'image:tag' or just 'image')
+
+    Returns:
+        List of fully qualified image:tag references
+
+    Examples:
+        ['base:2025.09'] -> ['base:2025.09']
+        ['base'] -> ['base:2025.09', 'base:2025.10', ...]
+        ['base', 'dotnet:9.0.100'] -> ['base:2025.09', ..., 'dotnet:9.0.100']
+    """
+    all_refs = get_all_image_refs()
+
+    # Build a map of image name -> list of refs
+    image_to_refs: dict[str, list[str]] = {}
+    for ref in all_refs:
+        name = ref.split(":")[0]
+        if name not in image_to_refs:
+            image_to_refs[name] = []
+        image_to_refs[name].append(ref)
+
+    expanded = []
+    for ref in refs:
+        if ":" in ref:
+            # Already a full ref
+            expanded.append(ref)
+        elif ref in image_to_refs:
+            # Image name only - expand to all tags
+            expanded.extend(image_to_refs[ref])
+        else:
+            # Unknown image, keep as-is (will fail later with helpful error)
+            expanded.append(ref)
+
+    return expanded
 
 
 def cmd_generate(args: list[str]) -> int:
@@ -298,7 +343,7 @@ def cmd_build(args: list[str]) -> int:
             image_refs.append(args[i])
             i += 1
 
-    # If no image specified, build all
+    # Expand image names to all their tags, or get all if none specified
     if not image_refs:
         try:
             image_refs = get_all_image_refs()
@@ -306,6 +351,13 @@ def cmd_build(args: list[str]) -> int:
                 print("No images found. Run 'image-manager generate' first.", file=sys.stderr)
                 return 1
             print(f"Building all images ({len(image_refs)} total)...")
+        except CyclicDependencyError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+    else:
+        try:
+            image_refs = expand_image_refs(image_refs)
+            print(f"Building {len(image_refs)} image(s)...")
         except CyclicDependencyError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
@@ -358,8 +410,16 @@ def cmd_manifest(args: list[str]) -> int:
             i += 1
 
     if not image_refs:
-        print("Error: image:tag is required for manifest command", file=sys.stderr)
-        print("Usage: image-manager manifest <image:tag> [--snapshot-id ID]", file=sys.stderr)
+        print("Error: target is required for manifest command", file=sys.stderr)
+        print("Usage: image-manager manifest <image|image:tag> [--snapshot-id ID]", file=sys.stderr)
+        return 1
+
+    # Expand image names to all their tags
+    try:
+        image_refs = expand_image_refs(image_refs)
+        print(f"Creating manifests for {len(image_refs)} image(s)...")
+    except CyclicDependencyError as e:
+        print(f"Error: {e}", file=sys.stderr)
         return 1
 
     # Create manifests
@@ -413,7 +473,7 @@ def cmd_test(args: list[str]) -> int:
             image_refs.append(args[i])
             i += 1
 
-    # If no image specified, test all
+    # Expand image names to all their tags, or get all if none specified
     if not image_refs:
         try:
             image_refs = get_all_image_refs()
@@ -421,6 +481,16 @@ def cmd_test(args: list[str]) -> int:
                 print("No images found. Run 'image-manager generate' first.", file=sys.stderr)
                 return 1
             msg = f"Testing all images ({len(image_refs)} total)"
+            if snapshot_id:
+                msg += f" [snapshot: {snapshot_id}]"
+            print(f"{msg}...")
+        except CyclicDependencyError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+    else:
+        try:
+            image_refs = expand_image_refs(image_refs)
+            msg = f"Testing {len(image_refs)} image(s)"
             if snapshot_id:
                 msg += f" [snapshot: {snapshot_id}]"
             print(f"{msg}...")
@@ -479,7 +549,7 @@ def cmd_sbom(args: list[str]) -> int:
             image_refs.append(args[i])
             i += 1
 
-    # If no image specified, generate for all
+    # Expand image names to all their tags, or get all if none specified
     if not image_refs:
         try:
             image_refs = get_all_image_refs()
@@ -487,6 +557,16 @@ def cmd_sbom(args: list[str]) -> int:
                 print("No images found. Run 'image-manager generate' first.", file=sys.stderr)
                 return 1
             msg = f"Generating SBOMs for all images ({len(image_refs)} total)"
+            if snapshot_id:
+                msg += f" [snapshot: {snapshot_id}]"
+            print(f"{msg}...")
+        except CyclicDependencyError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+    else:
+        try:
+            image_refs = expand_image_refs(image_refs)
+            msg = f"Generating SBOMs for {len(image_refs)} image(s)"
             if snapshot_id:
                 msg += f" [snapshot: {snapshot_id}]"
             print(f"{msg}...")
@@ -612,8 +692,15 @@ def cmd_lock(args: list[str]) -> int:
             # Skip alias files (they contain just the target tag name)
             if dockerfile.stat().st_size > 100:  # Dockerfiles are larger than alias files
                 image_refs.append(f"{name}:{tag}")
+        print(f"Locking all images ({len(image_refs)} total)...")
     else:
-        image_refs = args
+        # Expand image names to all their tags
+        try:
+            image_refs = expand_image_refs(args)
+            print(f"Locking {len(image_refs)} image(s)...")
+        except CyclicDependencyError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
 
     images_dir = Path("images")
     dist_dir = Path("dist")
