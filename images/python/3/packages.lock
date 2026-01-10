@@ -1,7 +1,7 @@
 _meta:
   generated_by: image-manager lock
   source: packages.ubuntu.com
-  date: '2026-01-10T14:52:28.809523+00:00'
+  date: '2026-01-10T14:54:09.508844+00:00'
 bases:
   ubuntu:24.04:
     digest: sha256:c35e29c9450151419d9448b0fd75374fec4fff364a27f176fb458d472dfc9e54

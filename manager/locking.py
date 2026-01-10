@@ -12,6 +12,9 @@ from pathlib import Path
 
 import yaml
 
+# Lock file format version - increment when format changes
+LOCK_VERSION = 1
+
 
 def _get_bin_platform() -> str:
     """Get the platform directory for bundled binaries."""
@@ -335,6 +338,7 @@ def write_lock_file(
 
     content = {
         "_meta": {
+            "version": LOCK_VERSION,
             "generated_by": "image-manager lock",
             "source": "packages.ubuntu.com",
             "date": datetime.now(timezone.utc).isoformat(),
