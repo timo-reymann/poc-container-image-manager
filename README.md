@@ -814,16 +814,13 @@ flowchart TD
         BC --> TAR[linux-X/image.tar]
         TAR <--> S3[S3 cache]
         TAR --> REG[Push to registry tag-linux-X]
-        REG --> CRANE[crane index append]
-        CRANE --> MP[image.tar multi-platform]
-        MP --> REGM[Push manifest to registry]
     end
 
     subgraph Manifest ["3. Manifest"]
         CHECK[Check registry for platform images]
-        CHECK --> CRANE2[crane index append]
-        CRANE2 --> MP2[image.tar multi-platform]
-        MP2 --> REGM2[Push manifest to registry]
+        CHECK --> CRANE[crane index append]
+        CRANE --> MP[image.tar multi-platform]
+        MP --> REGM[Push manifest to registry]
     end
 
     subgraph SBOM ["4. SBOM"]
@@ -837,7 +834,8 @@ flowchart TD
     end
 
     Generate --> Build
-    Build --> SBOM
+    Build --> Manifest
+    Manifest --> SBOM
     SBOM --> Test
 ```
 
