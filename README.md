@@ -41,9 +41,6 @@ Commands:
 - `manifest <image:tag>` - Create multi-platform manifest from registry images
 - `sbom [image:tag] [--format FORMAT]` - Generate SBOM for image(s)
 - `test [image:tag]` - Test image(s) using the tar archive
-- `start [daemon]` - Start daemons (buildkitd, dind, or all)
-- `stop [daemon]` - Stop daemons
-- `status [daemon]` - Check daemon status
 
 Build options:
   --no-cache          Disable S3 build cache
@@ -100,7 +97,7 @@ uv run image-manager sbom --format spdx-json   # SPDX format
 uv run image-manager sbom --format json        # Syft native format
 
 # Stop daemons when done
-uv run image-manager stop
+docker compose stop buildkitd dind
 ```
 
 ## Configuration
@@ -233,20 +230,19 @@ docker compose down -v     # Delete data
 ### Daemon management
 
 ```shell
-uv run image-manager start             # Start buildkitd + dind
-uv run image-manager start buildkitd   # Start only buildkitd
-uv run image-manager start dind        # Start only dind
-uv run image-manager status            # Check status
-uv run image-manager stop              # Stop all
+docker compose up -d buildkitd         # Start only buildkitd
+docker compose up -d dind              # Start only dind
+docker compose up -d                   # Start all services (registry, cache, buildkitd, dind)
+docker compose ps                      # Check status
+docker compose stop buildkitd dind     # Stop daemons (keep registry/cache)
+docker compose down                    # Stop all services
 ```
 
 **buildkitd** (for building):
-- **Linux**: Runs rootless natively using bundled `rootlesskit` + `buildkitd`
-- **macOS**: Runs rootless in a Docker container (`moby/buildkit:rootless`)
+- Runs rootless in a Docker container (`moby/buildkit:rootless`)
 
 **dind** (for testing):
-- **Linux**: Runs with minimal capabilities (`SYS_ADMIN`, `NET_ADMIN`, `MKNOD`)
-- **macOS**: Runs in Docker Desktop (requires privileged due to VM cgroup limitations)
+- Runs in Docker with minimal capabilities
 - Images are loaded from tar archives into the isolated daemon
 
 ### Production considerations
@@ -792,13 +788,13 @@ fileContentTests:
 │  │  │   (S3 cache) │  │ (registry:2) │  │   (joxit)    │          │   │
 │  │  │   :3900      │  │   :5050      │  │   :5051      │          │   │
 │  │  └──────────────┘  └──────────────┘  └──────────────┘          │   │
+│  │                                                                   │   │
+│  │  ┌──────────────┐  ┌──────────────┐                              │   │
+│  │  │  buildkitd   │  │     dind     │                              │   │
+│  │  │  (rootless)  │  │  (testing)   │                              │   │
+│  │  │  :8372       │  │  :2375       │                              │   │
+│  │  └──────────────┘  └──────────────┘                              │   │
 │  └─────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-│  ┌──────────────┐  ┌──────────────┐                                    │
-│  │  buildkitd   │  │     dind     │   ← image-manager start            │
-│  │  (rootless)  │  │  (testing)   │                                    │
-│  │  :8372       │  │  :2375       │                                    │
-│  └──────────────┘  └──────────────┘                                    │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```

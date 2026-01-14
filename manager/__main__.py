@@ -25,9 +25,6 @@ def print_usage() -> None:
     print("  sbom [target]       Generate SBOM for an image (or all images)")
     print("  test [target]       Test an image (or all images if none specified)")
     print()
-    print("  start [daemon]      Start daemons (buildkitd, dind, or all)")
-    print("  stop [daemon]       Stop daemons (buildkitd, dind, or all)")
-    print("  status [daemon]     Check daemon status")
     print("  generate-ci         Generate CI configuration (default: gitlab)")
     print()
     print("Target can be:")
@@ -71,8 +68,6 @@ def print_usage() -> None:
     print("  image-manager sbom base:2025.09                # Generate SBOM for specific tag")
     print("  image-manager sbom dotnet                      # Generate SBOM for all dotnet tags")
     print("  image-manager test base                        # Test all base image tags")
-    print("  image-manager start")
-    print("  image-manager status")
 
 
 def get_all_image_refs() -> list[str]:
@@ -671,85 +666,6 @@ def cmd_sbom(args: list[str]) -> int:
     return 0
 
 
-def cmd_start(args: list[str]) -> int:
-    """Start daemons."""
-    from manager.building import start_buildkitd
-    from manager.testing import start_dind
-
-    daemon = args[0] if args else "all"
-    valid_daemons = ("all", "buildkitd", "dind")
-
-    if daemon not in valid_daemons:
-        print(f"Unknown daemon: {daemon}", file=sys.stderr)
-        print(f"Available: {', '.join(valid_daemons)}", file=sys.stderr)
-        return 1
-
-    if daemon in ("all", "buildkitd"):
-        result = start_buildkitd()
-        if result != 0 and daemon == "buildkitd":
-            return result
-
-    if daemon in ("all", "dind"):
-        result = start_dind()
-        if result != 0 and daemon == "dind":
-            return result
-
-    return 0
-
-
-def cmd_stop(args: list[str]) -> int:
-    """Stop daemons."""
-    from manager.building import stop_buildkitd
-    from manager.testing import stop_dind
-
-    daemon = args[0] if args else "all"
-    valid_daemons = ("all", "buildkitd", "dind")
-
-    if daemon not in valid_daemons:
-        print(f"Unknown daemon: {daemon}", file=sys.stderr)
-        print(f"Available: {', '.join(valid_daemons)}", file=sys.stderr)
-        return 1
-
-    if daemon in ("all", "buildkitd"):
-        stop_buildkitd()
-
-    if daemon in ("all", "dind"):
-        stop_dind()
-
-    return 0
-
-
-def cmd_status(args: list[str]) -> int:
-    """Check daemon status."""
-    from manager.building import is_buildkitd_running, get_socket_addr
-    from manager.testing import is_dind_running, get_docker_host
-
-    daemon = args[0] if args else "all"
-    valid_daemons = ("all", "buildkitd", "dind")
-    all_running = True
-
-    if daemon not in valid_daemons:
-        print(f"Unknown daemon: {daemon}", file=sys.stderr)
-        print(f"Available: {', '.join(valid_daemons)}", file=sys.stderr)
-        return 1
-
-    if daemon in ("all", "buildkitd"):
-        if is_buildkitd_running():
-            print(f"buildkitd: running (addr: {get_socket_addr()})")
-        else:
-            print("buildkitd: not running")
-            all_running = False
-
-    if daemon in ("all", "dind"):
-        if is_dind_running():
-            print(f"dind: running (addr: {get_docker_host()})")
-        else:
-            print("dind: not running")
-            all_running = False
-
-    return 0 if all_running else 1
-
-
 def cmd_lock(args: list[str]) -> int:
     """Generate packages.lock for an image."""
     from manager.locking import run_lock
@@ -869,12 +785,6 @@ def main():
         sys.exit(cmd_sbom(args))
     elif command == "test":
         sys.exit(cmd_test(args))
-    elif command == "start":
-        sys.exit(cmd_start(args))
-    elif command == "stop":
-        sys.exit(cmd_stop(args))
-    elif command == "status":
-        sys.exit(cmd_status(args))
     elif command == "generate-ci":
         sys.exit(cmd_generate_ci(args))
     else:
