@@ -211,6 +211,63 @@ licenses: "Apache-2.0"  # Overrides global licenses
 | `org.opencontainers.image.licenses` | Global/image | Image-level overrides global |
 | `org.opencontainers.image.description` | image.yml | Per-image description |
 
+### Image Definition (`image.yml`)
+
+Each image is defined by an `image.yml` file in its directory:
+
+```yaml
+name: python                    # Image name (defaults to directory name)
+description: "Python runtime"   # OCI description label
+licenses: "MIT"                 # OCI licenses label (overrides global)
+is_base_image: true             # Mark as base image for resolve_base_image filter
+template: custom.jinja2         # Explicit template (optional)
+
+versions:                       # Image-level versions (inherited by all tags)
+  uv: 0.8.22
+  poetry: 2.2.1
+
+variables:                      # Image-level variables (inherited by all tags)
+  apt_packages: "curl git"
+
+tags:
+  - name: 3.13.7                # Tag name (required)
+    versions:                   # Tag-specific versions (merged with image-level)
+      python: 3.13.7
+    variables:                  # Tag-specific variables (merged with image-level)
+      extra_packages: "vim"
+    rootfs_user: "1000:1000"    # Override rootfs COPY --chown
+    rootfs_copy: false          # Disable rootfs injection for this tag
+
+variants:
+  - name: semantic-release      # Variant name (required)
+    tag_suffix: -semantic       # Suffix added to all tag names (required)
+    template: Dockerfile.semantic-release.jinja2  # Variant-specific template
+    versions:                   # Variant-specific versions (merged)
+      nodejs: "24"
+    variables:                  # Variant-specific variables (merged)
+      extra_tools: "npm"
+    rootfs_user: "node:node"    # Override for variant
+
+rootfs_user: "0:0"              # Default owner for COPY --chown
+rootfs_copy: true               # Enable rootfs injection (default: true)
+```
+
+**Configuration fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Image name (defaults to parent directory name) |
+| `description` | string | OCI image description label |
+| `licenses` | string | SPDX license expression (overrides global) |
+| `is_base_image` | bool | Marks image as resolvable via `resolve_base_image` filter |
+| `template` | string | Explicit Dockerfile template path |
+| `versions` | dict | Version variables accessible via `resolve_version` filter |
+| `variables` | dict | General variables accessible in templates |
+| `tags` | list | List of tags to generate |
+| `variants` | list | List of variants (each generates tags with suffix) |
+| `rootfs_user` | string | Default `--chown` value for rootfs COPY |
+| `rootfs_copy` | bool | Whether to inject rootfs COPY instruction |
+
 ### Infrastructure setup
 
 Start the infrastructure services (registry, cache):
@@ -570,8 +627,41 @@ flowchart TD
 
 Discovery order:
 1. Explicit template from config
-2. Variant-specific: `Dockerfile.{variant}.tmpl`
-3. Default: `Dockerfile.tmpl`
+2. Variant-specific: `Dockerfile.{variant}.jinja2`
+3. Default: `Dockerfile.jinja2`
+
+### Template Syntax
+
+Templates use Jinja2 with custom filters:
+
+**Dockerfile templates** (`Dockerfile.jinja2`):
+```jinja2
+FROM {{ "base" | resolve_base_image }}
+ENV PYTHON_VERSION={{ "python" | resolve_version }}
+RUN pip install uv=={{ "uv" | resolve_version }}
+```
+
+**Test templates** (`test.yml.jinja2`):
+```jinja2
+commandTests:
+  - name: "python-version"
+    command: "python"
+    args: ["--version"]
+    expectedOutput: ["Python {{ tag.versions.python }}"]
+```
+
+**Available filters:**
+| Filter | Description |
+|--------|-------------|
+| `resolve_base_image` | Resolves image name to full registry reference (e.g., `"base"` → `localhost:5050/base:2025.09`) |
+| `resolve_version` | Resolves version key from tag's `versions` dict (e.g., `"python"` → `3.13.7`) |
+
+**Available context variables:**
+| Variable | Description |
+|----------|-------------|
+| `image` | Current Image object with `name`, `tags`, etc. |
+| `tag` | Current Tag object with `name`, `versions`, `variables` |
+| `base_image` | (Variants only) Full qualified base tag reference |
 
 ### Variable Merging
 
@@ -612,15 +702,16 @@ images/
     │       ├── python-info        # Will be overridden by version
     │       └── image-level-only   # Unique to image level
     └── 3/
+        ├── Dockerfile.jinja2      # Default template
+        ├── test.yml.jinja2        # Test configuration template
+        ├── image.yml              # Image configuration
+        ├── packages.lock          # Pinned package versions (optional)
         ├── rootfs/                # Version level (higher priority)
         │   └── etc/
         │       ├── python-info    # Overrides image level
-        │       └── version-only   # Unique to version level
-        ├── semantic-release/
-        │   └── rootfs/            # Variant level (highest priority)
-        │       └── etc/
-        │           └── variant-only
-        └── image.yml
+        │       └── version-level-only
+        └── semantic-release/      # Variant directory
+            └── Dockerfile.jinja2  # Variant-specific template
 ```
 
 #### Merge Order (Later Wins)
