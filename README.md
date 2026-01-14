@@ -259,24 +259,12 @@ The local containerized registry and S3 cache are for development/PoC purposes. 
 - Local builds benefit from CI-cached layers and vice versa
 - Significantly speeds up both local iteration and CI pipelines
 
-```
-┌─────────────┐     ┌─────────────┐
-│   Local     │     │     CI      │
-│   Build     │     │   Pipeline  │
-└──────┬──────┘     └──────┬──────┘
-       │                   │
-       └───────┬───────────┘
-               ▼
-       ┌───────────────┐
-       │   S3 Cache    │  ← Shared layer cache
-       │  (external)   │
-       └───────────────┘
-               │
-               ▼
-       ┌───────────────┐
-       │   Registry    │  ← Final images
-       │  (external)   │
-       └───────────────┘
+```mermaid
+flowchart TD
+    LB[Local Build] --> S3
+    CI[CI Pipeline] --> S3
+    S3[S3 Cache<br/>external] -->|Shared layer cache| REG[Registry<br/>external]
+    REG -->|Final images| REG
 ```
 
 ### Snapshot builds (CI pipelines)
@@ -302,23 +290,19 @@ How `--snapshot-id` affects each command:
 
 This enables a clean promotion workflow:
 
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   MR/Branch     │     │     Main        │     │    Registry     │
-│   Pipeline      │     │   Pipeline      │     │                 │
-└────────┬────────┘     └────────┬────────┘     └────────┬────────┘
-         │                       │                       │
-         │ --snapshot-id mr-123  │                       │
-         ├──────────────────────────────────────────────►│
-         │                       │      base:2025.09-mr-123
-         │                       │      python:3.13-mr-123
-         │                       │                       │
-         │    (merge to main)    │                       │
-         │ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─►│                       │
-         │                       │ (no snapshot-id)      │
-         │                       ├──────────────────────►│
-         │                       │      base:2025.09     │
-         │                       │      python:3.13      │
+```mermaid
+sequenceDiagram
+    participant MR as MR/Branch Pipeline
+    participant Main as Main Pipeline
+    participant Reg as Registry
+
+    MR->>Reg: --snapshot-id mr-123
+    Note right of Reg: base:2025.09-mr-123<br/>python:3.13-mr-123
+
+    MR-->>Main: merge to main
+
+    Main->>Reg: (no snapshot-id)
+    Note right of Reg: base:2025.09<br/>python:3.13
 ```
 
 Benefits:
@@ -362,30 +346,12 @@ The `manifest` command:
 3. Pushes manifest as `base:2025.09`
 4. Exports manifest to `dist/base/2025.09/image.tar`
 
-```
-┌─────────────────┐     ┌─────────────────┐
-│   arm64 Runner  │     │   amd64 Runner  │
-│  --platform     │     │  --platform     │
-│     arm64       │     │     amd64       │
-└────────┬────────┘     └────────┬────────┘
-         │                       │
-         │  base:tag-linux-arm64 │  base:tag-linux-amd64
-         └───────────┬───────────┘
-                     ▼
-             ┌───────────────┐
-             │   Registry    │
-             └───────┬───────┘
-                     │
-                     ▼
-             ┌───────────────┐
-             │  Merge Step   │
-             │   manifest    │
-             └───────┬───────┘
-                     │
-                     ▼  base:tag (multi-platform)
-             ┌───────────────┐
-             │   Registry    │
-             └───────────────┘
+```mermaid
+flowchart TD
+    ARM[arm64 Runner<br/>--platform arm64] -->|base:tag-linux-arm64| REG1[Registry]
+    AMD[amd64 Runner<br/>--platform amd64] -->|base:tag-linux-amd64| REG1
+    REG1 --> MERGE[Merge Step<br/>manifest]
+    MERGE -->|base:tag multi-platform| REG2[Registry]
 ```
 
 ## Features
@@ -584,16 +550,14 @@ Options being considered:
 
 **Config Layer** → **Model Layer** → **Rendering Layer**
 
-```
-image.yml → ConfigLoader → ImageConfig
-                              ↓
-                        ModelResolver
-                              ↓
-                           Image (with Tags and Variants)
-                              ↓
-                          Renderer
-                              ↓
-                      Dockerfile + test.yml + index.html
+```mermaid
+flowchart TD
+    YAML[image.yml] --> CL[ConfigLoader]
+    CL --> IC[ImageConfig]
+    IC --> MR[ModelResolver]
+    MR --> IMG[Image with Tags and Variants]
+    IMG --> R[Renderer]
+    R --> OUT[Dockerfile + test.yml + index.html]
 ```
 
 **Config Layer** (`manager/config.py`): Loads and validates YAML files using Pydantic. No business logic - just validation and parsing.
@@ -746,57 +710,59 @@ fileContentTests:
 
 ### Build Flow
 
-```
-1. Generate     images/*.yml → dist/<name>/<tag>/Dockerfile
-                            → dist/<name>/<tag>/test.yml
-                            → dist/index.html (catalog)
+```mermaid
+flowchart TD
+    subgraph Generate ["1. Generate"]
+        GEN_IN[images/*.yml] --> GEN_OUT1[dist/name/tag/Dockerfile]
+        GEN_IN --> GEN_OUT2[dist/name/tag/test.yml]
+        GEN_IN --> GEN_OUT3[dist/index.html]
+    end
 
-2. Build        For each platform (or single with --platform):
-                  Dockerfile → buildctl --opt platform=X → linux-X/image.tar
-                            ↓
-                      S3 cache (import/export)
-                            ↓
-                      Push to registry (tag-linux-X)
+    subgraph Build ["2. Build"]
+        DF[Dockerfile] --> BC[buildctl --opt platform=X]
+        BC --> TAR[linux-X/image.tar]
+        TAR <--> S3[S3 cache]
+        TAR --> REG[Push to registry tag-linux-X]
+        REG --> CRANE[crane index append]
+        CRANE --> MP[image.tar multi-platform]
+        MP --> REGM[Push manifest to registry]
+    end
 
-                If multiple platforms:
-                  crane index append → image.tar (multi-platform)
-                            ↓
-                      Push manifest to registry (tag)
+    subgraph Manifest ["3. Manifest"]
+        CHECK[Check registry for platform images]
+        CHECK --> CRANE2[crane index append]
+        CRANE2 --> MP2[image.tar multi-platform]
+        MP2 --> REGM2[Push manifest to registry]
+    end
 
-3. Manifest     (Alternative to building both platforms locally)
-                Check registry for platform images
-                            ↓
-                crane index append → image.tar (multi-platform)
-                            ↓
-                Push manifest to registry
+    subgraph SBOM ["4. SBOM"]
+        TAR2[linux-X/image.tar] --> SYFT[syft scan]
+        SYFT --> SBOM_OUT[linux-X/sbom.cyclonedx.json]
+    end
 
-4. SBOM         linux-X/image.tar → syft scan → linux-X/sbom.cyclonedx.json
+    subgraph Test ["5. Test"]
+        TAR3[linux-X/image.tar] --> DIND[dind load]
+        DIND --> CST[container-structure-test]
+    end
 
-5. Test         linux-X/image.tar → dind load → container-structure-test
+    Generate --> Build
+    Build --> SBOM
+    SBOM --> Test
 ```
 
 ### Container Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                             Host Machine                                │
-│                                                                         │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │                    docker compose up -d                          │   │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │   │
-│  │  │    garage    │  │   registry   │  │  registry-ui │          │   │
-│  │  │   (S3 cache) │  │ (registry:2) │  │   (joxit)    │          │   │
-│  │  │   :3900      │  │   :5050      │  │   :5051      │          │   │
-│  │  └──────────────┘  └──────────────┘  └──────────────┘          │   │
-│  │                                                                   │   │
-│  │  ┌──────────────┐  ┌──────────────┐                              │   │
-│  │  │  buildkitd   │  │     dind     │                              │   │
-│  │  │  (rootless)  │  │  (testing)   │                              │   │
-│  │  │  :8372       │  │  :2375       │                              │   │
-│  │  └──────────────┘  └──────────────┘                              │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Host["Host Machine"]
+        subgraph DC["docker compose up -d"]
+            G[garage<br/>S3 cache<br/>:3900]
+            R[registry<br/>registry:2<br/>:5050]
+            RUI[registry-ui<br/>joxit<br/>:5051]
+            BK[buildkitd<br/>rootless<br/>:8372]
+            DIND[dind<br/>testing<br/>:2375]
+        end
+    end
 ```
 
 ### SBOM Generation
