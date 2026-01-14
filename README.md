@@ -811,8 +811,8 @@ flowchart TD
 
     subgraph Build ["2. Build"]
         DF[Dockerfile] --> BC[buildctl --opt platform=X]
+        BC <--> S3[S3 cache]
         BC --> TAR[linux-X/image.tar]
-        TAR <--> S3[S3 cache]
         TAR --> REG[Push to registry tag-linux-X]
     end
 
