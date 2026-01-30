@@ -33,10 +33,13 @@ jobs:
         with:
           lfs: true
 
-      - name: Install image-manager
-        run: |
-          pip install uv
-          uv sync
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
 
       - name: Generate Dockerfiles and configs
         run: uv run image-manager generate --snapshot-id "$SNAPSHOT_ID"
@@ -88,10 +91,13 @@ jobs:
           username: {{ "${{ github.actor }}" }}
           password: {{ "${{ secrets.GITHUB_TOKEN }}" }}
 
-      - name: Install image-manager
-        run: |
-          pip install uv
-          uv sync
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
 
       - name: Build {{ image.name }} ({{ platform }})
         run: uv run image-manager build {{ image.name }} --platform {{ platform }} --snapshot-id "$SNAPSHOT_ID"
@@ -132,10 +138,13 @@ jobs:
           username: {{ "${{ github.actor }}" }}
           password: {{ "${{ secrets.GITHUB_TOKEN }}" }}
 
-      - name: Install image-manager
-        run: |
-          pip install uv
-          uv sync
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
 {%- for platform in platforms %}
 
       - name: Download {{ image.name }}-{{ platform }} artifact
@@ -181,10 +190,13 @@ jobs:
           username: {{ "${{ github.actor }}" }}
           password: {{ "${{ secrets.GITHUB_TOKEN }}" }}
 
-      - name: Install image-manager
-        run: |
-          pip install uv
-          uv sync
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
 
       - name: Test {{ image.name }}
         run: uv run image-manager test {{ image.name }} --snapshot-id "$SNAPSHOT_ID" --pull
@@ -209,10 +221,13 @@ jobs:
           name: generated
           path: dist/
 
-      - name: Install image-manager
-        run: |
-          pip install uv
-          uv sync
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
 {%- for image in images %}
 
       - name: Download {{ image.name }}-manifest artifact
