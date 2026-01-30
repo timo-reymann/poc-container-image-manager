@@ -998,10 +998,11 @@ def run_build_platform(
             ]
         elif is_github_actions():
             # GitHub Actions cache (automatic fallback)
+            # ignore-error=true allows builds to continue if cache restore fails (e.g., first run)
             cache_name = f"{image_ref.split(':')[0]}-{platform_path}"
             cache_args = [
                 "--export-cache", f"type=gha,mode=max,scope={cache_name}",
-                "--import-cache", f"type=gha,scope={cache_name}",
+                "--import-cache", f"type=gha,scope={cache_name},ignore-error=true",
             ]
             print(f"Using GitHub Actions cache (scope: {cache_name})")
 
