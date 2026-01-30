@@ -728,6 +728,10 @@ uv run image-manager generate
 - **Binary packages** - Resolves binary package versions, not source packages
 - **No transitive locking** - Only explicitly installed packages are locked, not their dependencies
 
+### Stability Note
+
+Locking support is functional but not yet stable for production use. The flexible nature of APT source lists makes it difficult to guarantee consistent version resolution across different environments. While the determinism in build layers ensures that the same packages installed will produce the same result, implicit package upgrades (e.g., via `apt-get upgrade` or dependency updates) will still lead to modified images. For fully reproducible builds, avoid upgrade operations and pin all explicitly installed packages.
+
 ## Future enhancements
 
 - Pluggable version parsing strategies for non-semver tags (e.g., Ubuntu's `24.04`, date-based `2025.09`)
