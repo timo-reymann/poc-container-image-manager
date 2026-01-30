@@ -63,14 +63,6 @@ jobs:
       - manifest-{{ dep }}
 {%- endfor %}
 {%- endif %}
-    services:
-      buildkitd:
-        image: moby/buildkit:rootless
-        ports:
-          - 8372:8372
-        options: --security-opt seccomp=unconfined --security-opt apparmor=unconfined
-        env:
-          BUILDKITD_FLAGS: --addr tcp://0.0.0.0:8372 --oci-worker-no-process-sandbox
     env:
       BUILDKIT_HOST: tcp://127.0.0.1:8372
     steps:
@@ -78,8 +70,16 @@ jobs:
         with:
           lfs: true
 
-      - name: Wait for buildkitd
+      - name: Start buildkitd
         run: |
+          docker run -d --name buildkitd \
+            --security-opt seccomp=unconfined \
+            --security-opt apparmor=unconfined \
+            -p 127.0.0.1:8372:8372 \
+            moby/buildkit:rootless \
+            --addr tcp://0.0.0.0:8372 \
+            --oci-worker-no-process-sandbox
+          # Wait for buildkitd to be ready
           for i in {1..30}; do
             if nc -z 127.0.0.1 8372 2>/dev/null; then
               echo "buildkitd is ready"
@@ -88,7 +88,8 @@ jobs:
             echo "Waiting for buildkitd... ($i/30)"
             sleep 1
           done
-          echo "buildkitd failed to start"
+          echo "buildkitd logs:"
+          docker logs buildkitd
           exit 1
 
       - name: Download generated artifacts
