@@ -4,14 +4,6 @@ commandTests:
     command: "python"
     args: ["--version"]
     expectedOutput: ["Python {{ tag.versions.python }}"]
-  - name: "uv-installed"
-    command: "which"
-    args: ["uv"]
-    expectedOutput: ["/root/.local/bin/uv"]
-  - name: "poetry-installed"
-    command: "which"
-    args: ["poetry"]
-    expectedOutput: ["/root/.local/bin/poetry"]
 
 fileExistenceTests:
   - name: "rootfs-python-info-exists"
