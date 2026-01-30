@@ -714,13 +714,18 @@ jobs:
       - name: Prepare gh-pages content
         run: |
           mkdir -p gh-pages-content
-          # Copy all HTML reports
-          find dist -name "*.html" -exec cp --parents {} gh-pages-content/ \;
-          # Copy all SBOM JSON files
-          find dist -name "sbom*.json" -exec cp --parents {} gh-pages-content/ \;
-          # Move dist contents to root of gh-pages
-          mv gh-pages-content/dist/* gh-pages-content/ || true
+          # Copy dist structure preserving image name directories
+          for image_dir in dist/*/; do
+            image_name=$(basename "$image_dir")
+            mkdir -p "gh-pages-content/$image_name"
+            # Copy HTML and SBOM files preserving tag structure
+            find "$image_dir" \( -name "*.html" -o -name "sbom*.json" \) -exec cp --parents {} gh-pages-content/ \;
+          done
+          # Move from gh-pages-content/dist/* to gh-pages-content/*
+          mv gh-pages-content/dist/* gh-pages-content/ 2>/dev/null || true
           rm -rf gh-pages-content/dist
+          # Copy root index if exists
+          [ -f dist/index.html ] && cp dist/index.html gh-pages-content/
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
