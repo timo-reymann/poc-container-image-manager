@@ -89,14 +89,6 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Download buildctl
-        run: |
-          BUILDKIT_VERSION=v0.19.0
-          mkdir -p bin/linux-amd64/buildkit
-          curl -sSL "https://github.com/moby/buildkit/releases/download/${BUILDKIT_VERSION}/buildkit-${BUILDKIT_VERSION}.linux-amd64.tar.gz" | tar -xz -C bin/linux-amd64/buildkit --strip-components=1 bin/buildctl
-          chmod +x bin/linux-amd64/buildkit/buildctl
-          bin/linux-amd64/buildkit/buildctl --version
-
       - name: Build {{ image.name }} for amd64
         run: uv run image-manager build {{ image.name }} --snapshot-id "$SNAPSHOT_ID" --platform amd64
 
@@ -150,14 +142,6 @@ jobs:
 
       - name: Install dependencies
         run: uv sync
-
-      - name: Download buildctl
-        run: |
-          BUILDKIT_VERSION=v0.19.0
-          mkdir -p bin/linux-arm64/buildkit
-          curl -sSL "https://github.com/moby/buildkit/releases/download/${BUILDKIT_VERSION}/buildkit-${BUILDKIT_VERSION}.linux-arm64.tar.gz" | tar -xz -C bin/linux-arm64/buildkit --strip-components=1 bin/buildctl
-          chmod +x bin/linux-arm64/buildkit/buildctl
-          bin/linux-arm64/buildkit/buildctl --version
 
       - name: Build {{ image.name }} for arm64
         run: uv run image-manager build {{ image.name }} --snapshot-id "$SNAPSHOT_ID" --platform arm64
