@@ -1,5 +1,12 @@
 # Image Manager Configuration
 
+# Registry configuration for GHCR
+# Uses environment variables set by GitHub Actions workflow
+registry:
+  url: ${REGISTRY_URL}
+  username: ${REGISTRY_USERNAME}
+  password: ${REGISTRY_PASSWORD}
+
 labels:
   authors: "Timo Reymann <mail@timo-reymann.de>"
   documentation: "https://github.com/timo-reymann/poc-container-image-manager/blob/main/images/%image%"
