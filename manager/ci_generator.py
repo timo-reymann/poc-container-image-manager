@@ -60,8 +60,14 @@ def build_ci_context(images: list, artifacts: bool = False) -> dict:
     depths = _calculate_depths(image_names, dependencies)
     max_depth = max(depths.values()) if depths else 0
 
-    image_contexts = []
+    # Deduplicate images by name (keep first occurrence, merge tags)
+    seen_names = {}
     for image in images:
+        if image.name in seen_names:
+            # Merge tags from duplicate image
+            seen_names[image.name]["tags"].extend([tag.name for tag in image.tags])
+            continue
+
         # Get direct dependencies (other images this one depends on)
         deps = [d for d in dependencies.get(image.name, set())
                 if d in image_names]
@@ -69,12 +75,14 @@ def build_ci_context(images: list, artifacts: bool = False) -> dict:
         # Collect all tag names including variant tags
         tag_names = [tag.name for tag in image.tags]
 
-        image_contexts.append({
+        seen_names[image.name] = {
             "name": image.name,
             "dependencies": sorted(deps),
             "tags": tag_names,
             "depth": depths[image.name],
-        })
+        }
+
+    image_contexts = list(seen_names.values())
 
     # Sort images by depth, then by name for consistent ordering
     sorted_by_depth = sorted(image_contexts, key=lambda x: (x["depth"], x["name"]))
