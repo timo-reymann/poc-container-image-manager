@@ -291,13 +291,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: {{ image.name }}-amd64-build
-          path: dist/
+          path: .
 
       - name: Download {{ image.name }}-arm64-build artifact
         uses: actions/download-artifact@v4
         with:
           name: {{ image.name }}-arm64-build
-          path: dist/
+          path: .
 {%- endfor %}
 
       - name: Generate overview report
