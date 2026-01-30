@@ -110,6 +110,17 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
+      - name: Debug buildctl
+        run: |
+          echo "=== Checking buildctl binary ==="
+          ls -la bin/linux-amd64/buildkit/
+          file bin/linux-amd64/buildkit/buildctl
+          echo "=== Testing buildctl ==="
+          chmod +x bin/linux-amd64/buildkit/buildctl
+          bin/linux-amd64/buildkit/buildctl --version
+          echo "=== Testing connection to buildkitd ==="
+          bin/linux-amd64/buildkit/buildctl --addr tcp://127.0.0.1:8372 debug workers
+
       - name: Build {{ image.name }} for amd64
         env:
           BUILDKIT_HOST: tcp://127.0.0.1:8372
@@ -186,6 +197,17 @@ jobs:
 
       - name: Install dependencies
         run: uv sync
+
+      - name: Debug buildctl
+        run: |
+          echo "=== Checking buildctl binary ==="
+          ls -la bin/linux-arm64/buildkit/
+          file bin/linux-arm64/buildkit/buildctl
+          echo "=== Testing buildctl ==="
+          chmod +x bin/linux-arm64/buildkit/buildctl
+          bin/linux-arm64/buildkit/buildctl --version
+          echo "=== Testing connection to buildkitd ==="
+          bin/linux-arm64/buildkit/buildctl --addr tcp://127.0.0.1:8372 debug workers
 
       - name: Build {{ image.name }} for arm64
         env:
