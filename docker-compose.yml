@@ -46,20 +46,6 @@ services:
     depends_on:
       - registry
 
-  buildkit:
-    image: moby/buildkit:rootless
-    ports:
-      - "127.0.0.1:8372:8372"
-    security_opt:
-      - seccomp=unconfined
-      - apparmor=unconfined
-    command:
-      - --addr
-      - tcp://0.0.0.0:8372
-      - --oci-worker-no-process-sandbox
-    environment:
-      BUILDKITD_FLAGS: --oci-worker-no-process-sandbox
-
 volumes:
   garage-meta:
   garage-data:

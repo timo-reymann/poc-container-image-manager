@@ -253,6 +253,9 @@ def start_buildkitd_native() -> int:
     rootlesskit = get_rootlesskit_path()
     buildkitd = get_buildkitd_path()
 
+    # Log file for buildkitd output
+    log_file = DEFAULT_BUILDKIT_DIR / "buildkitd.log"
+
     cmd = [
         str(rootlesskit),
         "--net=host",
@@ -267,23 +270,36 @@ def start_buildkitd_native() -> int:
 
     print(f"Starting buildkitd (rootless): {' '.join(cmd)}")
 
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        start_new_session=True,
-    )
+    # Write output to log file so we can debug failures
+    with open(log_file, "w") as log:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
 
     get_pid_file().write_text(str(proc.pid))
 
-    for _ in range(30):
+    # Wait up to 10 seconds for socket to appear
+    for _ in range(100):
         if DEFAULT_SOCKET_PATH.exists():
             print(f"buildkitd started rootless (pid: {proc.pid}, socket: {DEFAULT_SOCKET_PATH})")
             return 0
+        # Check if process died
+        if proc.poll() is not None:
+            print(f"Error: buildkitd process exited with code {proc.returncode}", file=sys.stderr)
+            if log_file.exists():
+                print(f"buildkitd log output:", file=sys.stderr)
+                print(log_file.read_text(), file=sys.stderr)
+            return 1
         time.sleep(0.1)
 
-    print("Warning: buildkitd started but socket not yet available", file=sys.stderr)
-    return 0
+    print("Error: buildkitd started but socket not available after 10 seconds", file=sys.stderr)
+    if log_file.exists():
+        print(f"buildkitd log output:", file=sys.stderr)
+        print(log_file.read_text(), file=sys.stderr)
+    return 1
 
 
 def start_buildkitd() -> int:
