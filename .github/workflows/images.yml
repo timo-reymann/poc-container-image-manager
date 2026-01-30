@@ -676,37 +676,37 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: base-amd64-build
-          path: .
+          path: dist/base/
 
       - name: Download base-arm64-build artifact
         uses: actions/download-artifact@v4
         with:
           name: base-arm64-build
-          path: .
+          path: dist/base/
 
       - name: Download dotnet-amd64-build artifact
         uses: actions/download-artifact@v4
         with:
           name: dotnet-amd64-build
-          path: .
+          path: dist/dotnet/
 
       - name: Download dotnet-arm64-build artifact
         uses: actions/download-artifact@v4
         with:
           name: dotnet-arm64-build
-          path: .
+          path: dist/dotnet/
 
       - name: Download python-amd64-build artifact
         uses: actions/download-artifact@v4
         with:
           name: python-amd64-build
-          path: .
+          path: dist/python/
 
       - name: Download python-arm64-build artifact
         uses: actions/download-artifact@v4
         with:
           name: python-arm64-build
-          path: .
+          path: dist/python/
 
       - name: Generate overview report
         run: uv run image-manager generate
