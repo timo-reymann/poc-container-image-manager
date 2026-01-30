@@ -78,6 +78,19 @@ jobs:
         with:
           lfs: true
 
+      - name: Wait for buildkitd
+        run: |
+          for i in {1..30}; do
+            if nc -z 127.0.0.1 8372 2>/dev/null; then
+              echo "buildkitd is ready"
+              exit 0
+            fi
+            echo "Waiting for buildkitd... ($i/30)"
+            sleep 1
+          done
+          echo "buildkitd failed to start"
+          exit 1
+
       - name: Download generated artifacts
         uses: actions/download-artifact@v4
         with:
