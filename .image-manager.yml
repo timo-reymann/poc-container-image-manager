@@ -9,4 +9,4 @@ registry:
 
 labels:
   authors: "Timo Reymann <mail@timo-reymann.de>"
-  documentation: "https://github.com/timo-reymann/poc-container-image-manager/blob/main/images/%image%"
+  documentation: "https://timo-reymann.github.io/poc-container-image-manager/#%image%"
