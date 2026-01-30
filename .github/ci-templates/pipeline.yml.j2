@@ -53,13 +53,14 @@ jobs:
 
 {% for image in images %}
   # === {{ image.name | upper }} ===
-  build-{{ image.name }}:
-    runs-on: ubuntu-latest
+  # Build amd64
+  build-{{ image.name }}-amd64:
+    runs-on: ubuntu-latest-amd
     needs:
       - generate
 {%- if image.dependencies %}
 {%- for dep in image.dependencies %}
-      - build-{{ dep }}
+      - build-{{ dep }}-amd64
 {%- endfor %}
 {%- endif %}
     env:
@@ -109,28 +110,141 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Build {{ image.name }} (multi-platform with QEMU)
-        run: uv run image-manager build {{ image.name }} --snapshot-id "$SNAPSHOT_ID"
+      - name: Build {{ image.name }} for amd64
+        run: uv run image-manager build {{ image.name }} --snapshot-id "$SNAPSHOT_ID" --platform amd64
 
-      - name: Generate SBOM for {{ image.name }}
+      - name: Generate SBOM for {{ image.name }} (amd64)
         run: uv run image-manager sbom {{ image.name }} --snapshot-id "$SNAPSHOT_ID"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: {{ image.name }}-build
+          name: {{ image.name }}-amd64-build
           path: |
-            dist/{{ image.name }}/*/linux-*/sbom*.json
-            dist/{{ image.name }}/*/linux-*/sbom-report.html
+            dist/{{ image.name }}/*/linux-amd64/sbom*.json
+            dist/{{ image.name }}/*/linux-amd64/sbom-report.html
             dist/{{ image.name }}/*/index.html
             dist/{{ image.name }}/*/*.html
             dist/{{ image.name }}/*/*.json
           retention-days: 7
 
+  # Build arm64
+  build-{{ image.name }}-arm64:
+    runs-on: ubuntu-latest-arm64
+    needs:
+      - generate
+{%- if image.dependencies %}
+{%- for dep in image.dependencies %}
+      - build-{{ dep }}-arm64
+{%- endfor %}
+{%- endif %}
+    env:
+      BUILDKIT_HOST: tcp://127.0.0.1:8372
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Start buildkitd
+        run: |
+          docker run -d --name buildkitd --privileged \
+            -p 127.0.0.1:8372:8372 \
+            moby/buildkit:latest \
+            --addr tcp://0.0.0.0:8372
+          # Wait for buildkitd to be ready
+          for i in {1..30}; do
+            if nc -z 127.0.0.1 8372 2>/dev/null; then
+              echo "buildkitd is ready"
+              exit 0
+            fi
+            echo "Waiting for buildkitd... ($i/30)"
+            sleep 1
+          done
+          echo "buildkitd logs:"
+          docker logs buildkitd
+          exit 1
+
+      - name: Download generated artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: generated
+          path: dist/
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: {{ "${{ github.actor }}" }}
+          password: {{ "${{ secrets.GITHUB_TOKEN }}" }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Build {{ image.name }} for arm64
+        run: uv run image-manager build {{ image.name }} --snapshot-id "$SNAPSHOT_ID" --platform arm64
+
+      - name: Generate SBOM for {{ image.name }} (arm64)
+        run: uv run image-manager sbom {{ image.name }} --snapshot-id "$SNAPSHOT_ID"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: {{ image.name }}-arm64-build
+          path: |
+            dist/{{ image.name }}/*/linux-arm64/sbom*.json
+            dist/{{ image.name }}/*/linux-arm64/sbom-report.html
+            dist/{{ image.name }}/*/index.html
+            dist/{{ image.name }}/*/*.html
+            dist/{{ image.name }}/*/*.json
+          retention-days: 7
+
+  # Create multi-platform manifest
+  manifest-{{ image.name }}:
+    runs-on: ubuntu-latest
+    needs:
+      - build-{{ image.name }}-amd64
+      - build-{{ image.name }}-arm64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Download generated artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: generated
+          path: dist/
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: {{ "${{ github.actor }}" }}
+          password: {{ "${{ secrets.GITHUB_TOKEN }}" }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Create multi-platform manifest for {{ image.name }}
+        run: uv run image-manager manifest {{ image.name }} --snapshot-id "$SNAPSHOT_ID"
+
+      - name: Apply aliases for {{ image.name }}
+        run: uv run image-manager retag {{ image.name }} --snapshot-id "$SNAPSHOT_ID"
+
   test-{{ image.name }}:
     runs-on: ubuntu-latest
     needs:
-      - build-{{ image.name }}
+      - manifest-{{ image.name }}
     services:
       dind:
         image: docker:dind
@@ -208,10 +322,16 @@ jobs:
         run: uv sync
 {%- for image in images %}
 
-      - name: Download {{ image.name }}-build artifact
+      - name: Download {{ image.name }}-amd64-build artifact
         uses: actions/download-artifact@v4
         with:
-          name: {{ image.name }}-build
+          name: {{ image.name }}-amd64-build
+          path: dist/
+
+      - name: Download {{ image.name }}-arm64-build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: {{ image.name }}-arm64-build
           path: dist/
 {%- endfor %}
 
