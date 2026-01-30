@@ -1164,18 +1164,13 @@ def run_build_platform(
             ] + repro_args + label_args + cache_args
 
             print(f"Building {image_ref} for {plat}...")
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            print(f"Command: {' '.join(cmd)}", file=sys.stderr)
+            sys.stderr.flush()
+            sys.stdout.flush()
+            # Stream output in real-time (don't capture)
+            result = subprocess.run(cmd)
             if result.returncode != 0:
-                print(f"Build failed for {image_ref} ({plat}):", file=sys.stderr)
-                if result.stdout:
-                    print("=== STDOUT ===", file=sys.stderr)
-                    print(result.stdout, file=sys.stderr)
-                if result.stderr:
-                    print("=== STDERR ===", file=sys.stderr)
-                    print(result.stderr, file=sys.stderr)
-            elif result.stdout:
-                # Show build progress on success too
-                print(result.stdout)
+                print(f"Build failed for {image_ref} ({plat}) with exit code {result.returncode}", file=sys.stderr)
     else:
         cmd = [
             str(buildctl), "--addr", addr, "build",
@@ -1187,18 +1182,13 @@ def run_build_platform(
         ] + repro_args + label_args + cache_args
 
         print(f"Building {image_ref} for {plat}...")
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        print(f"Command: {' '.join(cmd)}", file=sys.stderr)
+        sys.stderr.flush()
+        sys.stdout.flush()
+        # Stream output in real-time (don't capture)
+        result = subprocess.run(cmd)
         if result.returncode != 0:
-            print(f"Build failed for {image_ref} ({plat}):", file=sys.stderr)
-            if result.stdout:
-                print("=== STDOUT ===", file=sys.stderr)
-                print(result.stdout, file=sys.stderr)
-            if result.stderr:
-                print("=== STDERR ===", file=sys.stderr)
-                print(result.stderr, file=sys.stderr)
-        elif result.stdout:
-            # Show build progress on success too
-            print(result.stdout)
+            print(f"Build failed for {image_ref} ({plat}) with exit code {result.returncode}", file=sys.stderr)
 
     if result.returncode == 0:
         print(f"Platform image saved to: {tar_path}")
