@@ -111,6 +111,8 @@ jobs:
         run: uv sync
 
       - name: Build {{ image.name }} for amd64
+        env:
+          BUILDKIT_HOST: tcp://127.0.0.1:8372
         run: uv run image-manager build {{ image.name }} --snapshot-id "$SNAPSHOT_ID" --platform amd64
 
       - name: Generate SBOM for {{ image.name }} (amd64)
@@ -186,6 +188,8 @@ jobs:
         run: uv sync
 
       - name: Build {{ image.name }} for arm64
+        env:
+          BUILDKIT_HOST: tcp://127.0.0.1:8372
         run: uv run image-manager build {{ image.name }} --snapshot-id "$SNAPSHOT_ID" --platform arm64
 
       - name: Generate SBOM for {{ image.name }} (arm64)
