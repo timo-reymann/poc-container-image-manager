@@ -55,17 +55,12 @@ def get_docker_client() -> docker.DockerClient:
 def get_socket_addr() -> str:
     """Get the buildkitd socket address.
 
-    Uses BUILDKIT_HOST env var if set, otherwise:
-    - macOS: TCP connection to Docker container
-    - Linux: Unix socket
+    Uses BUILDKIT_HOST env var if set, otherwise TCP connection to Docker container.
     """
     if addr := os.environ.get("BUILDKIT_HOST"):
         return addr
 
-    if platform.system().lower() == "darwin":
-        return f"tcp://127.0.0.1:{CONTAINER_PORT}"
-
-    return f"unix://{DEFAULT_SOCKET_PATH}"
+    return f"tcp://127.0.0.1:{CONTAINER_PORT}"
 
 
 def get_bin_path() -> Path:
@@ -132,24 +127,8 @@ def is_container_running() -> bool:
 
 
 def is_buildkitd_running() -> bool:
-    """Check if buildkitd is running (native or container)."""
-    system = platform.system().lower()
-
-    if system == "darwin":
-        return is_container_running()
-
-    # Linux: check PID file
-    pid_file = get_pid_file()
-    if not pid_file.exists():
-        return False
-
-    try:
-        pid = int(pid_file.read_text().strip())
-        os.kill(pid, 0)
-        return True
-    except (ValueError, ProcessLookupError, PermissionError):
-        pid_file.unlink(missing_ok=True)
-        return False
+    """Check if buildkitd container is running."""
+    return is_container_running()
 
 
 def is_port_open(port: int, timeout: float = 0.1) -> bool:
@@ -303,50 +282,22 @@ def start_buildkitd_native() -> int:
 
 
 def start_buildkitd() -> int:
-    """Start buildkitd daemon (container on macOS, native on Linux)."""
-    system = platform.system().lower()
-
-    if system == "darwin":
-        return start_buildkitd_container()
-    elif system == "linux":
-        return start_buildkitd_native()
-    else:
-        print(f"Unsupported platform: {system}", file=sys.stderr)
-        return 1
+    """Start buildkitd daemon as a Docker container."""
+    return start_buildkitd_container()
 
 
 def stop_buildkitd() -> int:
-    """Stop buildkitd daemon."""
-    system = platform.system().lower()
-
-    if system == "darwin":
-        try:
-            client = get_docker_client()
-            container = client.containers.get(CONTAINER_NAME)
-            container.remove(force=True)
-            print("Stopped buildkitd container")
-        except NotFound:
-            print("buildkitd container was not running")
-        except Exception as e:
-            print(f"Error stopping buildkitd: {e}", file=sys.stderr)
-            return 1
-        return 0
-
-    # Linux: stop native process
-    pid_file = get_pid_file()
-    if not pid_file.exists():
-        print("buildkitd is not running")
-        return 0
-
+    """Stop buildkitd Docker container."""
     try:
-        pid = int(pid_file.read_text().strip())
-        os.kill(pid, signal.SIGTERM)
-        print(f"Stopped buildkitd (pid: {pid})")
-    except (ValueError, ProcessLookupError):
-        print("buildkitd was not running")
-
-    pid_file.unlink(missing_ok=True)
-    DEFAULT_SOCKET_PATH.unlink(missing_ok=True)
+        client = get_docker_client()
+        container = client.containers.get(CONTAINER_NAME)
+        container.remove(force=True)
+        print("Stopped buildkitd container")
+    except NotFound:
+        print("buildkitd container was not running")
+    except Exception as e:
+        print(f"Error stopping buildkitd: {e}", file=sys.stderr)
+        return 1
     return 0
 
 
