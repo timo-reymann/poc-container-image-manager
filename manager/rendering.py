@@ -601,7 +601,6 @@ def generate_tag_report(image_name: str, tag_name: str, snapshot_id: str | None 
                 <tr>
                     <th>Platform</th>
                     <th>Size</th>
-                    <th>Image</th>
                     <th>SBOM</th>
                 </tr>
             </thead>
@@ -612,11 +611,8 @@ def generate_tag_report(image_name: str, tag_name: str, snapshot_id: str | None 
             size = get_platform_size(tag_path, plat)
 
             # Check for artifacts
-            image_tar = tag_path / plat_dir / "image.tar"
             sbom_report = tag_path / plat_dir / "sbom-report.html"
             sbom_json = tag_path / plat_dir / "sbom.cyclonedx.json"
-
-            image_link = f'<a href="{plat_dir}/image.tar" class="file-link">image.tar</a>' if image_tar.exists() else '-'
 
             sbom_links = []
             if sbom_report.exists():
@@ -628,7 +624,6 @@ def generate_tag_report(image_name: str, tag_name: str, snapshot_id: str | None 
             html += f"""                <tr>
                     <td><span class="platform-badge">{plat}</span></td>
                     <td>{size}</td>
-                    <td>{image_link}</td>
                     <td>{sbom_link}</td>
                 </tr>
 """
@@ -638,37 +633,7 @@ def generate_tag_report(image_name: str, tag_name: str, snapshot_id: str | None 
     else:
         html += '        <p class="no-artifacts">No platform artifacts found. Run <code>image-manager build</code> first.</p>\n'
 
-    # Build artifacts section
-    html += """
-        <h2>Build Artifacts</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>File</th>
-                    <th>Description</th>
-                </tr>
-            </thead>
-            <tbody>
-"""
-
-    artifacts = [
-        ("Dockerfile", "Build instructions"),
-        ("test.yml", "Test configuration"),
-        ("image.tar", "Multi-platform manifest (or single platform copy)"),
-    ]
-
-    for filename, desc in artifacts:
-        filepath = tag_path / filename
-        if filepath.exists():
-            html += f"""                <tr>
-                    <td><a href="{filename}" class="file-link">{filename}</a></td>
-                    <td>{desc}</td>
-                </tr>
-"""
-
-    html += """            </tbody>
-        </table>
-    </div>
+    html += """    </div>
 </body>
 </html>
 """
