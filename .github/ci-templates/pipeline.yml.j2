@@ -31,7 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v4
@@ -68,7 +68,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
 
       - name: Start buildkitd
         run: |
@@ -110,16 +110,13 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Debug buildctl
+      - name: Download buildctl
         run: |
-          echo "=== Checking buildctl binary ==="
-          ls -la bin/linux-amd64/buildkit/
-          file bin/linux-amd64/buildkit/buildctl
-          echo "=== Testing buildctl ==="
+          BUILDKIT_VERSION=v0.19.0
+          mkdir -p bin/linux-amd64/buildkit
+          curl -sSL "https://github.com/moby/buildkit/releases/download/${BUILDKIT_VERSION}/buildkit-${BUILDKIT_VERSION}.linux-amd64.tar.gz" | tar -xz -C bin/linux-amd64/buildkit --strip-components=1 bin/buildctl
           chmod +x bin/linux-amd64/buildkit/buildctl
           bin/linux-amd64/buildkit/buildctl --version
-          echo "=== Testing connection to buildkitd ==="
-          bin/linux-amd64/buildkit/buildctl --addr tcp://127.0.0.1:8372 debug workers
 
       - name: Build {{ image.name }} for amd64
         env:
@@ -156,7 +153,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
 
       - name: Start buildkitd
         run: |
@@ -198,16 +195,13 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Debug buildctl
+      - name: Download buildctl
         run: |
-          echo "=== Checking buildctl binary ==="
-          ls -la bin/linux-arm64/buildkit/
-          file bin/linux-arm64/buildkit/buildctl
-          echo "=== Testing buildctl ==="
+          BUILDKIT_VERSION=v0.19.0
+          mkdir -p bin/linux-arm64/buildkit
+          curl -sSL "https://github.com/moby/buildkit/releases/download/${BUILDKIT_VERSION}/buildkit-${BUILDKIT_VERSION}.linux-arm64.tar.gz" | tar -xz -C bin/linux-arm64/buildkit --strip-components=1 bin/buildctl
           chmod +x bin/linux-arm64/buildkit/buildctl
           bin/linux-arm64/buildkit/buildctl --version
-          echo "=== Testing connection to buildkitd ==="
-          bin/linux-arm64/buildkit/buildctl --addr tcp://127.0.0.1:8372 debug workers
 
       - name: Build {{ image.name }} for arm64
         env:
@@ -238,7 +232,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
 
       - name: Download generated artifacts
         uses: actions/download-artifact@v4
@@ -284,7 +278,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
 
       - name: Wait for Docker
         run: |
@@ -331,7 +325,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
 
       - name: Download generated artifacts
         uses: actions/download-artifact@v4
