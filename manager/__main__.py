@@ -20,6 +20,7 @@ def print_usage() -> None:
     print("  generate            Generate Dockerfiles and test configs from images/")
     print("  reports             Generate HTML reports for all images and tags")
     print("  lock [target]       Generate packages.lock with pinned versions")
+    print("  lint [target]       Lint Dockerfiles using hadolint")
     print("  build [target]      Build an image (or all images if none specified)")
     print("  retag <target>      Apply aliases to existing registry images")
     print("  manifest <target>   Create multi-platform manifest from registry images")
@@ -58,6 +59,10 @@ def print_usage() -> None:
     print()
     print("Manifest options:")
     print("  --snapshot-id ID    Use snapshot ID suffix for registry tags")
+    print()
+    print("Lint options:")
+    print("  --format FORMAT     Output format: tty (default), json, checkstyle, sarif")
+    print("  --strict            Treat warnings as errors")
     print()
     print("SBOM options:")
     print("  --format FORMAT     SBOM format: cyclonedx-json (default), spdx-json, json")
@@ -777,6 +782,68 @@ def cmd_lock(args: list[str]) -> int:
     return exit_code
 
 
+def cmd_lint(args: list[str]) -> int:
+    """Lint Dockerfiles using hadolint."""
+    from manager.linting import run_lint
+
+    image_refs = []
+    format = "tty"
+    strict = False
+
+    # Parse options and image refs
+    i = 0
+    while i < len(args):
+        if args[i] == "--format" and i + 1 < len(args):
+            format = args[i + 1]
+            i += 2
+        elif args[i] == "--strict":
+            strict = True
+            i += 1
+        elif args[i].startswith("--"):
+            print(f"Unknown argument: {args[i]}", file=sys.stderr)
+            return 1
+        else:
+            image_refs.append(args[i])
+            i += 1
+
+    # Expand image names to all their tags, or get all if none specified
+    if not image_refs:
+        try:
+            image_refs = get_all_image_refs()
+            if not image_refs:
+                print("No images found. Run 'image-manager generate' first.", file=sys.stderr)
+                return 1
+            print(f"Linting all images ({len(image_refs)} total)...")
+        except CyclicDependencyError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+    else:
+        try:
+            image_refs = expand_image_refs(image_refs)
+            print(f"Linting {len(image_refs)} image(s)...")
+        except CyclicDependencyError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+
+    # Lint each image
+    failed = []
+    for image_ref in image_refs:
+        try:
+            result = run_lint(image_ref, format=format, strict=strict)
+            if result != 0:
+                failed.append(image_ref)
+        except (RuntimeError, FileNotFoundError, ValueError) as e:
+            print(f"Error: {e}", file=sys.stderr)
+            failed.append(image_ref)
+
+    if failed:
+        print(f"\nLint issues in: {', '.join(failed)}", file=sys.stderr)
+        return 1
+
+    print(f"\nAll {len(image_refs)} Dockerfile(s) passed lint checks")
+    return 0
+
+
 def cmd_generate_ci(args: list[str]) -> int:
     """Generate CI configuration."""
     from manager.ci_generator import generate_gitlab_ci, generate_github_ci, generate_custom_ci
@@ -888,6 +955,8 @@ def main():
         sys.exit(cmd_reports(args))
     elif command == "lock":
         sys.exit(cmd_lock(args))
+    elif command == "lint":
+        sys.exit(cmd_lint(args))
     elif command == "build":
         sys.exit(cmd_build(args))
     elif command == "retag":
