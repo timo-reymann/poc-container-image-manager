@@ -12,4 +12,9 @@
       - uses: actions/checkout@v4
       - run: image-manager build {{ image.name }} --platform {{ platform }} --snapshot-id "$SNAPSHOT_ID"
       - run: image-manager sbom {{ image.name }} --platform {{ platform }} --snapshot-id "$SNAPSHOT_ID"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: {{ image.name }}-{{ platform }}
+          path: dist/{{ image.name }}/*/linux-{{ platform }}/
+          retention-days: 7
 {% endfor %}

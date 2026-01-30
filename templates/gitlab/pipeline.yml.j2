@@ -17,11 +17,20 @@ variables:
   script:
     - image-manager build ${IMAGE_NAME} --platform ${PLATFORM} --snapshot-id "$SNAPSHOT_ID"
     - image-manager sbom ${IMAGE_NAME} --platform ${PLATFORM} --snapshot-id "$SNAPSHOT_ID"
+  artifacts:
+    paths:
+      - dist/${IMAGE_NAME}/*/linux-${PLATFORM}/
+    expire_in: 1 week
 
 .manifest:
   image: registry.example.com/ci/image-manager:latest
   script:
     - image-manager manifest ${IMAGE_NAME} --snapshot-id "$SNAPSHOT_ID"
+  artifacts:
+    paths:
+      - dist/${IMAGE_NAME}/*/image.tar
+      - dist/${IMAGE_NAME}/*/index.html
+    expire_in: 1 week
 
 .test:
   image: registry.example.com/ci/image-manager:latest

@@ -5,4 +5,8 @@
       - manifest-{{ image.name }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: {{ image.name }}-manifest
+          path: dist/
       - run: image-manager test {{ image.name }} --snapshot-id "$SNAPSHOT_ID"
