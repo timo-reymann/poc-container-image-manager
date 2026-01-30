@@ -799,23 +799,24 @@ def cmd_generate_ci(args: list[str]) -> int:
     sorted_images = sort_images(all_images)
 
     # Generate CI based on provider or custom template
+    ci_image = ci_config.image
     if template_dir:
         # Custom template
         if not output_path:
             print("Error: --output is required when using --template", file=sys.stderr)
             return 1
         try:
-            generate_custom_ci(sorted_images, Path(template_dir), Path(output_path), artifacts=artifacts)
+            generate_custom_ci(sorted_images, Path(template_dir), Path(output_path), artifacts=artifacts, ci_image=ci_image)
         except FileNotFoundError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
     elif provider == "gitlab":
         final_output = Path(output_path) if output_path else Path(".gitlab/ci/images.yml")
-        generate_gitlab_ci(sorted_images, final_output, artifacts=artifacts)
+        generate_gitlab_ci(sorted_images, final_output, artifacts=artifacts, ci_image=ci_image)
         output_path = str(final_output)
     else:  # github
         final_output = Path(output_path) if output_path else Path(".github/workflows/images.yml")
-        generate_github_ci(sorted_images, final_output, artifacts=artifacts)
+        generate_github_ci(sorted_images, final_output, artifacts=artifacts, ci_image=ci_image)
         output_path = str(final_output)
 
     print(f"Generated CI configuration: {output_path}")

@@ -9,7 +9,7 @@ build-{{ image.name }}-{{ platform }}:
     - generate
 {%- if image.dependencies %}
 {%- for dep in image.dependencies %}
-    - manifest-{{ dep }}
+    - test-{{ dep }}
 {%- endfor %}
 {%- endif %}
 {% endfor %}

@@ -1,12 +1,20 @@
 {% for platform in platforms %}
   build-{{ image.name }}-{{ platform }}:
     runs-on: ubuntu-latest
-    container: registry.example.com/ci/image-manager:latest
+    container: {{ ci_image | default('registry.example.com/ci/image-manager:latest') }}
+    services:
+      dind:
+        image: docker:dind
+        options: --privileged
+        env:
+          DOCKER_TLS_CERTDIR: ""
+    env:
+      DOCKER_HOST: tcp://dind:2375
     needs:
       - generate
 {%- if image.dependencies %}
 {%- for dep in image.dependencies %}
-      - manifest-{{ dep }}
+      - test-{{ dep }}
 {%- endfor %}
 {%- endif %}
     steps:

@@ -14,7 +14,13 @@ variables:
 # === BASE TEMPLATES ===
 
 .build:
-  image: registry.example.com/ci/image-manager:latest
+  image: {{ ci_image | default('registry.example.com/ci/image-manager:latest') }}
+  services:
+    - name: moby/buildkit:latest
+      alias: buildkitd
+      command: ["--addr", "tcp://0.0.0.0:8372"]
+  variables:
+    BUILDKIT_HOST: tcp://buildkitd:8372
   script:
     - image-manager build ${IMAGE_NAME} --platform ${PLATFORM} --snapshot-id "$SNAPSHOT_ID"
     - image-manager sbom ${IMAGE_NAME} --platform ${PLATFORM} --snapshot-id "$SNAPSHOT_ID"
@@ -26,9 +32,10 @@ variables:
 {%- endif %}
 
 .manifest:
-  image: registry.example.com/ci/image-manager:latest
+  image: {{ ci_image | default('registry.example.com/ci/image-manager:latest') }}
   script:
     - image-manager manifest ${IMAGE_NAME} --snapshot-id "$SNAPSHOT_ID"
+    - image-manager retag ${IMAGE_NAME} --snapshot-id "$SNAPSHOT_ID"
 {%- if artifacts %}
   artifacts:
     paths:
@@ -38,14 +45,20 @@ variables:
 {%- endif %}
 
 .test:
-  image: registry.example.com/ci/image-manager:latest
+  image: {{ ci_image | default('registry.example.com/ci/image-manager:latest') }}
   stage: test
+  services:
+    - name: docker:dind
+      alias: dind
+  variables:
+    DOCKER_HOST: tcp://dind:2375
+    DOCKER_TLS_CERTDIR: ""
   script:
     - image-manager test ${IMAGE_NAME} --snapshot-id "$SNAPSHOT_ID"{% if not artifacts %} --pull{% endif %}
 
 # === GENERATE ===
 generate:
-  image: registry.example.com/ci/image-manager:latest
+  image: {{ ci_image | default('registry.example.com/ci/image-manager:latest') }}
   stage: generate
   script:
     - image-manager generate --snapshot-id "$SNAPSHOT_ID"

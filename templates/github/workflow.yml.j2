@@ -17,7 +17,7 @@ jobs:
   # === GENERATE ===
   generate:
     runs-on: ubuntu-latest
-    container: registry.example.com/ci/image-manager:latest
+    container: {{ ci_image | default('registry.example.com/ci/image-manager:latest') }}
     steps:
       - uses: actions/checkout@v4
         with:

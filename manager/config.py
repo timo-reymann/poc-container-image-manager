@@ -424,10 +424,12 @@ class CIConfig:
         template: str | None = None,
         output: str | None = None,
         artifacts: bool = False,
+        image: str | None = None,
     ):
         self.template = template  # Path to custom template directory
         self.output = output  # Custom output path
         self.artifacts = artifacts  # Enable artifact passing between jobs
+        self.image = image  # Docker image for CI jobs
 
 
 def get_ci_config() -> CIConfig:
@@ -438,6 +440,7 @@ def get_ci_config() -> CIConfig:
           template: ./ci-templates/     # Custom template directory
           output: .circleci/config.yml  # Custom output path (optional)
           artifacts: true               # Enable artifact passing (default: false)
+          image: ghcr.io/org/image-manager:latest  # CI job image (optional)
 
     Returns CIConfig with defaults if not configured.
     """
@@ -451,6 +454,7 @@ def get_ci_config() -> CIConfig:
         template=expand_env_vars(ci_config.get("template")),
         output=expand_env_vars(ci_config.get("output")),
         artifacts=ci_config.get("artifacts", False),
+        image=expand_env_vars(ci_config.get("image")),
     )
 
 

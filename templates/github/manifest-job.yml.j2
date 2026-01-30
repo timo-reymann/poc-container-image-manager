@@ -1,6 +1,6 @@
   manifest-{{ image.name }}:
     runs-on: ubuntu-latest
-    container: registry.example.com/ci/image-manager:latest
+    container: {{ ci_image | default('registry.example.com/ci/image-manager:latest') }}
     needs:
 {%- for platform in platforms %}
       - build-{{ image.name }}-{{ platform }}
@@ -22,6 +22,7 @@
 {%- endfor %}
 {%- endif %}
       - run: image-manager manifest {{ image.name }} --snapshot-id "$SNAPSHOT_ID"
+      - run: image-manager retag {{ image.name }} --snapshot-id "$SNAPSHOT_ID"
 {%- if artifacts %}
       - uses: actions/upload-artifact@v4
         with:
