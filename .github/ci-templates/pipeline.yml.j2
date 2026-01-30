@@ -106,9 +106,6 @@ jobs:
           path: |
             dist/{{ image.name }}/*/linux-amd64/sbom*.json
             dist/{{ image.name }}/*/linux-amd64/sbom-report.html
-            dist/{{ image.name }}/*/index.html
-            dist/{{ image.name }}/*/*.html
-            dist/{{ image.name }}/*/*.json
           retention-days: 7
 
   # Build arm64
@@ -163,9 +160,6 @@ jobs:
           path: |
             dist/{{ image.name }}/*/linux-arm64/sbom*.json
             dist/{{ image.name }}/*/linux-arm64/sbom-report.html
-            dist/{{ image.name }}/*/index.html
-            dist/{{ image.name }}/*/*.html
-            dist/{{ image.name }}/*/*.json
           retention-days: 7
 
   # Create multi-platform manifest
@@ -300,8 +294,8 @@ jobs:
           path: dist/{{ image.name }}/
 {%- endfor %}
 
-      - name: Generate overview report
-        run: uv run image-manager generate
+      - name: Generate HTML reports
+        run: uv run image-manager reports
 
       - name: Prepare gh-pages content
         run: |

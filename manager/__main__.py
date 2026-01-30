@@ -6,7 +6,7 @@ from pathlib import Path
 
 from manager.config import ConfigLoader
 from manager.models import ModelResolver
-from manager.rendering import RenderContext, render_dockerfile, render_test_config, generate_image_report
+from manager.rendering import RenderContext, render_dockerfile, render_test_config, generate_image_report, generate_single_image_report, generate_tag_report
 from manager.dependency_graph import sort_images, extract_dependencies, CyclicDependencyError
 from manager.rootfs import collect_rootfs_paths, merge_rootfs, has_rootfs_content, warn_sensitive_files
 from manager.locking import read_lock_file, read_base_digest, rewrite_apt_install, rewrite_from_digest, extract_base_image
@@ -18,6 +18,7 @@ def print_usage() -> None:
     print()
     print("Commands:")
     print("  generate            Generate Dockerfiles and test configs from images/")
+    print("  reports             Generate HTML reports for all images and tags")
     print("  lock [target]       Generate packages.lock with pinned versions")
     print("  build [target]      Build an image (or all images if none specified)")
     print("  retag <target>      Apply aliases to existing registry images")
@@ -323,6 +324,53 @@ def cmd_generate(args: list[str]) -> int:
     # Generate image catalog report
     report_path = generate_image_report(sorted_images, snapshot_id)
     print(f"Image catalog: {report_path}")
+
+    return 0
+
+
+def cmd_reports(args: list[str]) -> int:
+    """Generate HTML reports for all images and tags."""
+    snapshot_id = None
+
+    # Parse options
+    i = 0
+    while i < len(args):
+        if args[i] == "--snapshot-id" and i + 1 < len(args):
+            snapshot_id = args[i + 1]
+            i += 2
+        else:
+            i += 1
+
+    # Load all images
+    resolver = ModelResolver()
+    all_images = []
+    for image_yaml in Path("images").glob("**/image.yml"):
+        config = ConfigLoader.load(image_yaml)
+        image = resolver.resolve(config, image_yaml.parent)
+        all_images.append(image)
+
+    sorted_images = sort_images(all_images)
+
+    # Generate main catalog report
+    report_path = generate_image_report(sorted_images, snapshot_id)
+    print(f"Image catalog: {report_path}")
+
+    # Generate per-image and per-tag reports
+    for image in sorted_images:
+        # Generate image-level report
+        image_report = generate_single_image_report(image, snapshot_id)
+        print(f"Image report: {image_report}")
+
+        # Generate tag-level reports
+        for tag in image.tags:
+            tag_report = generate_tag_report(image.name, tag.name, snapshot_id)
+            print(f"Tag report: {tag_report}")
+
+        # Generate variant tag reports
+        for variant in image.variants:
+            for tag in variant.tags:
+                tag_report = generate_tag_report(image.name, tag.name, snapshot_id)
+                print(f"Tag report: {tag_report}")
 
     return 0
 
@@ -836,6 +884,8 @@ def main():
         sys.exit(0)
     elif command == "generate":
         sys.exit(cmd_generate(args))
+    elif command == "reports":
+        sys.exit(cmd_reports(args))
     elif command == "lock":
         sys.exit(cmd_lock(args))
     elif command == "build":

@@ -101,9 +101,6 @@ jobs:
           path: |
             dist/base/*/linux-amd64/sbom*.json
             dist/base/*/linux-amd64/sbom-report.html
-            dist/base/*/index.html
-            dist/base/*/*.html
-            dist/base/*/*.json
           retention-days: 7
 
   # Build arm64
@@ -153,9 +150,6 @@ jobs:
           path: |
             dist/base/*/linux-arm64/sbom*.json
             dist/base/*/linux-arm64/sbom-report.html
-            dist/base/*/index.html
-            dist/base/*/*.html
-            dist/base/*/*.json
           retention-days: 7
 
   # Create multi-platform manifest
@@ -298,9 +292,6 @@ jobs:
           path: |
             dist/dotnet/*/linux-amd64/sbom*.json
             dist/dotnet/*/linux-amd64/sbom-report.html
-            dist/dotnet/*/index.html
-            dist/dotnet/*/*.html
-            dist/dotnet/*/*.json
           retention-days: 7
 
   # Build arm64
@@ -351,9 +342,6 @@ jobs:
           path: |
             dist/dotnet/*/linux-arm64/sbom*.json
             dist/dotnet/*/linux-arm64/sbom-report.html
-            dist/dotnet/*/index.html
-            dist/dotnet/*/*.html
-            dist/dotnet/*/*.json
           retention-days: 7
 
   # Create multi-platform manifest
@@ -496,9 +484,6 @@ jobs:
           path: |
             dist/python/*/linux-amd64/sbom*.json
             dist/python/*/linux-amd64/sbom-report.html
-            dist/python/*/index.html
-            dist/python/*/*.html
-            dist/python/*/*.json
           retention-days: 7
 
   # Build arm64
@@ -549,9 +534,6 @@ jobs:
           path: |
             dist/python/*/linux-arm64/sbom*.json
             dist/python/*/linux-arm64/sbom-report.html
-            dist/python/*/index.html
-            dist/python/*/*.html
-            dist/python/*/*.json
           retention-days: 7
 
   # Create multi-platform manifest
@@ -708,8 +690,8 @@ jobs:
           name: python-arm64-build
           path: dist/python/
 
-      - name: Generate overview report
-        run: uv run image-manager generate
+      - name: Generate HTML reports
+        run: uv run image-manager reports
 
       - name: Prepare gh-pages content
         run: |
