@@ -23,6 +23,7 @@ The following tools are bundled in `bin/` for linux-amd64, linux-arm64, and darw
 | [crane](https://github.com/google/go-containerregistry) | v0.20.7 | Multi-tagging images |
 | [container-structure-test](https://github.com/GoogleContainerTools/container-structure-test) | v1.22.1 | Image testing |
 | [syft](https://github.com/anchore/syft) | v1.39.0 | SBOM generation |
+| [hadolint](https://github.com/hadolint/hadolint) | v2.14.0 | Dockerfile linting |
 | [buildkit](https://github.com/moby/buildkit) | v0.26.3 | Rootless builds |
 | [rootlesskit](https://github.com/rootless-containers/rootlesskit) | v2.3.6 | Rootless wrapper (Linux) |
 
@@ -37,6 +38,7 @@ Commands:
 - `generate [--no-lock]` - Generate Dockerfiles and test configs from `images/`
 - `generate-ci [options]` - Generate CI pipeline configuration
 - `lock <image:tag>` - Generate packages.lock with pinned versions and digest
+- `lint [image:tag] [options]` - Lint Dockerfiles using hadolint
 - `build [image:tag] [options]` - Build image(s) to `dist/<name>/<tag>/image.tar`
 - `manifest <image:tag>` - Create multi-platform manifest from registry images
 - `sbom [image:tag] [--format FORMAT]` - Generate SBOM for image(s)
@@ -46,6 +48,10 @@ Build options:
   --no-cache          Disable S3 build cache
   --platform PLAT     Build for specific platform only (amd64, arm64)
                       Default: builds linux/amd64 + linux/arm64 with multi-platform manifest
+
+Lint options:
+  --format FORMAT     Output format: tty (default), json, checkstyle, sarif
+  --strict            Treat warnings as errors
 
 Generate CI options:
   --provider PROV     Use built-in template (gitlab, github)
@@ -101,6 +107,13 @@ uv run image-manager manifest base:2025.09
 # Generate SBOM in different formats
 uv run image-manager sbom --format spdx-json   # SPDX format
 uv run image-manager sbom --format json        # Syft native format
+
+# Lint Dockerfiles
+uv run image-manager lint                      # Lint all images
+uv run image-manager lint base                 # Lint specific image
+uv run image-manager lint base:2025.09         # Lint specific tag
+uv run image-manager lint --format json        # JSON output for CI
+uv run image-manager lint --strict             # Fail on warnings
 
 # Daemons stop automatically when commands complete
 # Or stop infrastructure services when done
