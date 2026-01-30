@@ -102,8 +102,9 @@ uv run image-manager manifest base:2025.09
 uv run image-manager sbom --format spdx-json   # SPDX format
 uv run image-manager sbom --format json        # Syft native format
 
-# Stop daemons when done
-docker compose stop buildkitd dind
+# Daemons stop automatically when commands complete
+# Or stop infrastructure services when done
+docker compose down
 ```
 
 ## Configuration
@@ -378,21 +379,76 @@ docker compose down -v     # Delete data
 
 ### Daemon management
 
+The build and test commands can either use external daemons (via environment variables) or start their own.
+
+**Environment variables (opt-in for external daemons):**
+
+| Variable | Command | Effect |
+|----------|---------|--------|
+| `BUILDKIT_HOST` | `build` | Use external buildkitd (e.g., `tcp://127.0.0.1:8372`) |
+| `DOCKER_HOST` | `test` | Use external Docker daemon (e.g., `tcp://127.0.0.1:2375`) |
+
+When these variables are set, the commands assume the daemon is already running and won't start their own.
+
+**Local development (auto-start):**
+
+Without environment variables, daemons start automatically:
+- `build`: Starts buildkitd container on macOS, native rootless on Linux
+- `test`: Starts dind container for isolated testing
+
 ```shell
-docker compose up -d buildkitd         # Start only buildkitd
-docker compose up -d dind              # Start only dind
-docker compose up -d                   # Start all services (registry, cache, buildkitd, dind)
+# Just run commands - daemons start automatically
+uv run image-manager build base:2025.09
+uv run image-manager test base:2025.09
+```
+
+**CI usage (external daemons):**
+
+In CI, use service containers and set environment variables:
+
+```yaml
+# GitHub Actions example
+services:
+  buildkitd:
+    image: moby/buildkit:latest
+    ports:
+      - 8372:8372
+    options: --privileged
+env:
+  BUILDKIT_HOST: tcp://127.0.0.1:8372
+```
+
+```yaml
+# For testing
+services:
+  dind:
+    image: docker:dind
+    ports:
+      - 2375:2375
+    options: --privileged
+    env:
+      DOCKER_TLS_CERTDIR: ""
+env:
+  DOCKER_HOST: tcp://127.0.0.1:2375
+```
+
+**Manual daemon management (optional):**
+
+```shell
+docker compose up -d                   # Start all services (registry, cache)
 docker compose ps                      # Check status
-docker compose stop buildkitd dind     # Stop daemons (keep registry/cache)
 docker compose down                    # Stop all services
 ```
 
 **buildkitd** (for building):
-- Runs rootless in a Docker container (`moby/buildkit:rootless`)
+- macOS: Runs in Docker container (`moby/buildkit:rootless`)
+- Linux: Runs native rootless with embedded binary
+- CI: Use service container with `BUILDKIT_HOST`
 
 **dind** (for testing):
-- Runs in Docker with minimal capabilities
-- Images are loaded from tar archives into the isolated daemon
+- Runs Docker-in-Docker for isolated testing
+- Images are loaded/pulled into the isolated daemon
+- CI: Use service container with `DOCKER_HOST`
 
 ### Production considerations
 
@@ -936,12 +992,14 @@ flowchart TD
 ```mermaid
 flowchart TB
     subgraph Host["Host Machine"]
-        subgraph DC["docker compose up -d"]
+        subgraph DC["docker compose (infrastructure)"]
             G[garage<br/>S3 cache<br/>:3900]
             R[registry<br/>registry:2<br/>:5050]
             RUI[registry-ui<br/>joxit<br/>:5051]
-            BK[buildkitd<br/>rootless<br/>:8372]
-            DIND[dind<br/>testing<br/>:2375]
+        end
+        subgraph Auto["Auto-started or external"]
+            BK[buildkitd<br/>BUILDKIT_HOST<br/>:8372]
+            DIND[dind<br/>DOCKER_HOST<br/>:2375]
         end
     end
 ```
