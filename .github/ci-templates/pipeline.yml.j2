@@ -130,7 +130,7 @@ jobs:
 
   # Build arm64
   build-{{ image.name }}-arm64:
-    runs-on: ubuntu-latest-arm
+    runs-on: ubuntu-24.04-arm
     needs:
       - generate
 {%- if image.dependencies %}
