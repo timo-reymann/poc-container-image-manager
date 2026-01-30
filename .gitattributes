@@ -1,3 +1,4 @@
+bin/**/buildkit/buildctl filter=lfs diff=lfs merge=lfs -text
 bin/**/buildkit/buildkitd filter=lfs diff=lfs merge=lfs -text
 
 # Syntax highlighting for Jinja2 templates
