@@ -197,16 +197,40 @@ def start_buildkitd_container() -> int:
         print(f"Failed to start buildkitd container: {e}", file=sys.stderr)
         return 1
 
-    # Wait for TCP port to be ready
+    # Wait for buildkitd to be fully ready
     print("Waiting for buildkitd to be ready...")
-    for _ in range(50):  # 5 second timeout
-        if is_port_open(CONTAINER_PORT):
-            print(f"buildkitd container started rootless (addr: tcp://127.0.0.1:{CONTAINER_PORT})")
-            return 0
-        time.sleep(0.1)
+    addr = f"tcp://127.0.0.1:{CONTAINER_PORT}"
+    buildctl = get_buildctl_path()
 
-    print("Warning: buildkitd started but port not yet available", file=sys.stderr)
-    return 0
+    for i in range(30):  # 30 second timeout
+        if is_port_open(CONTAINER_PORT):
+            # Port is open, verify buildkitd is actually responding
+            try:
+                result = subprocess.run(
+                    [str(buildctl), "--addr", addr, "debug", "workers"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if result.returncode == 0:
+                    print(f"buildkitd container started rootless (addr: {addr})")
+                    return 0
+            except subprocess.TimeoutExpired:
+                pass
+        time.sleep(1)
+        if i > 0 and i % 5 == 0:
+            print(f"Still waiting for buildkitd... ({i}/30)")
+
+    # Check container logs for errors
+    try:
+        container = client.containers.get(CONTAINER_NAME)
+        logs = container.logs(tail=50).decode("utf-8", errors="replace")
+        print(f"buildkitd container logs:\n{logs}", file=sys.stderr)
+    except Exception:
+        pass
+
+    print("Error: buildkitd failed to become ready", file=sys.stderr)
+    return 1
 
 
 def start_buildkitd_native() -> int:
