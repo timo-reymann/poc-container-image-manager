@@ -351,7 +351,15 @@ def stop_buildkitd() -> int:
 
 
 def ensure_buildkitd() -> bool:
-    """Ensure buildkitd is running, start if needed."""
+    """Ensure buildkitd is running, start if needed.
+
+    If BUILDKIT_HOST env var is set, assumes external buildkitd is available.
+    """
+    # External buildkitd (e.g., CI service container)
+    if os.environ.get("BUILDKIT_HOST"):
+        print(f"Using external buildkitd: {os.environ['BUILDKIT_HOST']}")
+        return True
+
     if is_buildkitd_running():
         return True
     return start_buildkitd() == 0
