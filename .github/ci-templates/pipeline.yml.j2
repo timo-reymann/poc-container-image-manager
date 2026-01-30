@@ -121,7 +121,6 @@ jobs:
         with:
           name: {{ image.name }}-{{ platform }}
           path: |
-            dist/{{ image.name }}/*/linux-{{ platform }}/image.tar
             dist/{{ image.name }}/*/linux-{{ platform }}/sbom*.json
             dist/{{ image.name }}/*/linux-{{ platform }}/sbom-report.html
           retention-days: 7
@@ -175,7 +174,6 @@ jobs:
         with:
           name: {{ image.name }}-manifest
           path: |
-            dist/{{ image.name }}/*/image.tar
             dist/{{ image.name }}/*/index.html
             dist/{{ image.name }}/*/*.html
             dist/{{ image.name }}/*/*.json
