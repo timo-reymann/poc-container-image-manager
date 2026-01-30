@@ -25,6 +25,7 @@
         with:
           name: generated
           path: dist/
+      - uses: crazy-max/ghaction-github-runtime@v3
       - run: image-manager build {{ image.name }} --platform {{ platform }} --snapshot-id "$SNAPSHOT_ID"
       - run: image-manager sbom {{ image.name }} --platform {{ platform }} --snapshot-id "$SNAPSHOT_ID"
 {%- if artifacts %}
