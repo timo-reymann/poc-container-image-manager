@@ -2,7 +2,7 @@ FROM {{ "base" | resolve_base_image }}
 USER 0
 
 ENV PYENV_ROOT=/usr/share/pyenv \
-	PATH=/usr/share/pyenv/shims:/usr/share/pyenv/bin:$PATH \
+	PATH=/root/.local/bin:/usr/share/pyenv/shims:/usr/share/pyenv/bin:$PATH \
 	PYTHON_VERSION={{ "python" | resolve_version}} \
 	PIPENV_DEFAULT_PYTHON_VERSION={{ "python" | resolve_version}} \
 	PYTHON_CONFIGURE_OPTS="--enable-shared --enable-optimizations"
