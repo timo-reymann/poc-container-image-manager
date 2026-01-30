@@ -86,6 +86,9 @@ jobs:
           pip install uv
           uv sync
 
+      - name: Start buildkit
+        run: docker compose up -d buildkit
+
       - name: Build {{ image.name }} ({{ platform }})
         run: uv run image-manager build {{ image.name }} --platform {{ platform }} --snapshot-id "$SNAPSHOT_ID"
 
