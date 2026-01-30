@@ -25,13 +25,37 @@ permissions:
   id-token: write
 
 jobs:
+  # === GENERATE ===
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Install image-manager
+        run: |
+          pip install uv
+          uv sync
+
+      - name: Generate Dockerfiles and configs
+        run: uv run image-manager generate --snapshot-id "$SNAPSHOT_ID"
+
+      - name: Upload generated artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated
+          path: dist/
+          retention-days: 7
+
 {% for image in images %}
   # === {{ image.name | upper }} ===
 {% for platform in platforms %}
   build-{{ image.name }}-{{ platform }}:
     runs-on: ubuntu-latest
-{%- if image.dependencies %}
     needs:
+      - generate
+{%- if image.dependencies %}
 {%- for dep in image.dependencies %}
       - manifest-{{ dep }}
 {%- endfor %}
@@ -40,6 +64,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           lfs: true
+
+      - name: Download generated artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: generated
+          path: dist/
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -82,6 +112,12 @@ jobs:
         with:
           lfs: true
 
+      - name: Download generated artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: generated
+          path: dist/
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -93,8 +129,8 @@ jobs:
         run: |
           pip install uv
           uv sync
-
 {%- for platform in platforms %}
+
       - name: Download {{ image.name }}-{{ platform }} artifact
         uses: actions/download-artifact@v4
         with:
@@ -125,6 +161,12 @@ jobs:
         with:
           lfs: true
 
+      - name: Download generated artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: generated
+          path: dist/
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -154,18 +196,25 @@ jobs:
         with:
           lfs: true
 
+      - name: Download generated artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: generated
+          path: dist/
+
       - name: Install image-manager
         run: |
           pip install uv
           uv sync
-
 {%- for image in images %}
+
       - name: Download {{ image.name }}-manifest artifact
         uses: actions/download-artifact@v4
         with:
           name: {{ image.name }}-manifest
           path: dist/
 {%- for platform in platforms %}
+
       - name: Download {{ image.name }}-{{ platform }} artifact
         uses: actions/download-artifact@v4
         with:
