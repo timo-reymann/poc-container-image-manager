@@ -55,7 +55,7 @@ jobs:
   # === {{ image.name | upper }} ===
   # Build amd64
   build-{{ image.name }}-amd64:
-    runs-on: ubuntu-latest-amd
+    runs-on: ubuntu-latest
     needs:
       - generate
 {%- if image.dependencies %}
@@ -130,7 +130,7 @@ jobs:
 
   # Build arm64
   build-{{ image.name }}-arm64:
-    runs-on: ubuntu-latest-arm64
+    runs-on: ubuntu-latest-arm
     needs:
       - generate
 {%- if image.dependencies %}
