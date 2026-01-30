@@ -135,7 +135,15 @@ def stop_dind() -> int:
 
 
 def ensure_dind() -> bool:
-    """Ensure dind is running, start if needed."""
+    """Ensure dind is running, start if needed.
+
+    If DOCKER_HOST env var is set, assumes external dind is available.
+    """
+    # External dind (e.g., CI service container)
+    if os.environ.get("DOCKER_HOST"):
+        print(f"Using external Docker: {os.environ['DOCKER_HOST']}")
+        return True
+
     if is_dind_running():
         return True
     return start_dind() == 0
@@ -143,6 +151,9 @@ def ensure_dind() -> bool:
 
 def get_docker_host() -> str:
     """Get the Docker host for testing."""
+    # Use external DOCKER_HOST if set
+    if host := os.environ.get("DOCKER_HOST"):
+        return host
     return f"tcp://127.0.0.1:{DIND_PORT}"
 
 
