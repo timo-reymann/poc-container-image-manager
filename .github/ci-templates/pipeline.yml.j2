@@ -94,7 +94,7 @@ jobs:
         uses: crazy-max/ghaction-github-runtime@v3
 
       - name: Build {{ image.name }} for amd64
-        run: uv run image-manager build {{ image.name }} --snapshot-id "$SNAPSHOT_ID" --platform amd64
+        run: uv run image-manager build {{ image.name }} --snapshot-id "$SNAPSHOT_ID" --platform amd64 --no-cache
 
       - name: Generate SBOM for {{ image.name }} (amd64)
         run: uv run image-manager sbom {{ image.name }} --snapshot-id "$SNAPSHOT_ID"
@@ -151,7 +151,7 @@ jobs:
         uses: crazy-max/ghaction-github-runtime@v3
 
       - name: Build {{ image.name }} for arm64
-        run: uv run image-manager build {{ image.name }} --snapshot-id "$SNAPSHOT_ID" --platform arm64
+        run: uv run image-manager build {{ image.name }} --snapshot-id "$SNAPSHOT_ID" --platform arm64 --no-cache
 
       - name: Generate SBOM for {{ image.name }} (arm64)
         run: uv run image-manager sbom {{ image.name }} --snapshot-id "$SNAPSHOT_ID"
