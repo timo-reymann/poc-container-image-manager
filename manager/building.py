@@ -56,13 +56,15 @@ def get_socket_addr() -> str:
     """Get the buildkitd socket address.
 
     Uses BUILDKIT_HOST env var if set, otherwise:
-    - macOS: TCP connection to Docker container
-    - Linux: Unix socket
+    - macOS/CI: TCP connection to Docker container
+    - Linux (non-CI): Unix socket
     """
     if addr := os.environ.get("BUILDKIT_HOST"):
         return addr
 
-    if platform.system().lower() == "darwin":
+    is_ci = os.environ.get("CI") == "true" or os.environ.get("GITHUB_ACTIONS") == "true"
+
+    if platform.system().lower() == "darwin" or is_ci:
         return f"tcp://127.0.0.1:{CONTAINER_PORT}"
 
     return f"unix://{DEFAULT_SOCKET_PATH}"
@@ -134,11 +136,12 @@ def is_container_running() -> bool:
 def is_buildkitd_running() -> bool:
     """Check if buildkitd is running (native or container)."""
     system = platform.system().lower()
+    is_ci = os.environ.get("CI") == "true" or os.environ.get("GITHUB_ACTIONS") == "true"
 
-    if system == "darwin":
+    if system == "darwin" or is_ci:
         return is_container_running()
 
-    # Linux: check PID file
+    # Linux (non-CI): check PID file
     pid_file = get_pid_file()
     if not pid_file.exists():
         return False
@@ -164,7 +167,7 @@ def is_port_open(port: int, timeout: float = 0.1) -> bool:
 
 
 def start_buildkitd_container() -> int:
-    """Start buildkitd as a rootless Docker container (for macOS)."""
+    """Start buildkitd as a rootless Docker container (for macOS and CI)."""
     if is_container_running():
         print("buildkitd container is already running")
         return 0
@@ -178,9 +181,15 @@ def start_buildkitd_container() -> int:
     except NotFound:
         pass
 
+    # Determine host gateway based on platform
+    system = platform.system().lower()
+    if system == "darwin":
+        registry_host = f"host.docker.internal:{REGISTRY_PORT}"
+    else:
+        # Linux: use host-gateway or localhost with host network
+        registry_host = f"localhost:{REGISTRY_PORT}"
+
     # Create buildkitd config to allow insecure local registry
-    # The registry runs on host, accessible via host.docker.internal on macOS
-    registry_host = f"host.docker.internal:{REGISTRY_PORT}"
     buildkitd_config = f"""
 [registry."{registry_host}"]
   http = true
@@ -195,25 +204,30 @@ def start_buildkitd_container() -> int:
 
     print(f"Starting buildkitd container rootless ({BUILDKIT_IMAGE})...")
     try:
-        client.containers.run(
-            BUILDKIT_IMAGE,
-            name=CONTAINER_NAME,
-            detach=True,
-            # Rootless mode - no privileged flag needed
-            security_opt=["seccomp=unconfined", "apparmor=unconfined"],
-            ports={f"{CONTAINER_PORT}/tcp": ("127.0.0.1", CONTAINER_PORT)},
-            command=[
+        container_kwargs = {
+            "name": CONTAINER_NAME,
+            "detach": True,
+            "security_opt": ["seccomp=unconfined", "apparmor=unconfined"],
+            "command": [
                 "--addr", f"tcp://0.0.0.0:{CONTAINER_PORT}",
                 "--oci-worker-no-process-sandbox",
                 "--config", "/etc/buildkit/buildkitd.toml",
             ],
-            environment={
+            "environment": {
                 "BUILDKITD_FLAGS": "--oci-worker-no-process-sandbox",
             },
-            volumes={
+            "volumes": {
                 str(config_file.absolute()): {"bind": "/etc/buildkit/buildkitd.toml", "mode": "ro"},
             },
-        )
+        }
+
+        # On Linux CI, use host network for easier registry access
+        if system == "linux":
+            container_kwargs["network_mode"] = "host"
+        else:
+            container_kwargs["ports"] = {f"{CONTAINER_PORT}/tcp": ("127.0.0.1", CONTAINER_PORT)}
+
+        client.containers.run(BUILDKIT_IMAGE, **container_kwargs)
     except APIError as e:
         print(f"Failed to start buildkitd container: {e}", file=sys.stderr)
         return 1
@@ -287,10 +301,14 @@ def start_buildkitd_native() -> int:
 
 
 def start_buildkitd() -> int:
-    """Start buildkitd daemon (container on macOS, native on Linux)."""
+    """Start buildkitd daemon (container on macOS/CI, native on Linux)."""
     system = platform.system().lower()
 
-    if system == "darwin":
+    # Use container mode on macOS or in CI environments (GitHub Actions, GitLab CI, etc.)
+    # Rootless native mode doesn't work well in CI runners
+    is_ci = os.environ.get("CI") == "true" or os.environ.get("GITHUB_ACTIONS") == "true"
+
+    if system == "darwin" or is_ci:
         return start_buildkitd_container()
     elif system == "linux":
         return start_buildkitd_native()
