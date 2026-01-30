@@ -72,13 +72,10 @@ jobs:
 
       - name: Start buildkitd
         run: |
-          docker run -d --name buildkitd \
-            --security-opt seccomp=unconfined \
-            --security-opt apparmor=unconfined \
+          docker run -d --name buildkitd --privileged \
             -p 127.0.0.1:8372:8372 \
-            moby/buildkit:rootless \
-            --addr tcp://0.0.0.0:8372 \
-            --oci-worker-no-process-sandbox
+            moby/buildkit:latest \
+            --addr tcp://0.0.0.0:8372
           # Wait for buildkitd to be ready
           for i in {1..30}; do
             if nc -z 127.0.0.1 8372 2>/dev/null; then
