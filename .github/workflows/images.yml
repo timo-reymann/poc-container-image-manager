@@ -89,7 +89,7 @@ jobs:
         uses: crazy-max/ghaction-github-runtime@v3
 
       - name: Build base for amd64
-        run: uv run image-manager build base --snapshot-id "$SNAPSHOT_ID" --platform amd64
+        run: uv run image-manager build base --snapshot-id "$SNAPSHOT_ID" --platform amd64 --no-cache
 
       - name: Generate SBOM for base (amd64)
         run: uv run image-manager sbom base --snapshot-id "$SNAPSHOT_ID"
@@ -141,7 +141,7 @@ jobs:
         uses: crazy-max/ghaction-github-runtime@v3
 
       - name: Build base for arm64
-        run: uv run image-manager build base --snapshot-id "$SNAPSHOT_ID" --platform arm64
+        run: uv run image-manager build base --snapshot-id "$SNAPSHOT_ID" --platform arm64 --no-cache
 
       - name: Generate SBOM for base (arm64)
         run: uv run image-manager sbom base --snapshot-id "$SNAPSHOT_ID"
@@ -286,7 +286,7 @@ jobs:
         uses: crazy-max/ghaction-github-runtime@v3
 
       - name: Build dotnet for amd64
-        run: uv run image-manager build dotnet --snapshot-id "$SNAPSHOT_ID" --platform amd64
+        run: uv run image-manager build dotnet --snapshot-id "$SNAPSHOT_ID" --platform amd64 --no-cache
 
       - name: Generate SBOM for dotnet (amd64)
         run: uv run image-manager sbom dotnet --snapshot-id "$SNAPSHOT_ID"
@@ -339,7 +339,7 @@ jobs:
         uses: crazy-max/ghaction-github-runtime@v3
 
       - name: Build dotnet for arm64
-        run: uv run image-manager build dotnet --snapshot-id "$SNAPSHOT_ID" --platform arm64
+        run: uv run image-manager build dotnet --snapshot-id "$SNAPSHOT_ID" --platform arm64 --no-cache
 
       - name: Generate SBOM for dotnet (arm64)
         run: uv run image-manager sbom dotnet --snapshot-id "$SNAPSHOT_ID"
@@ -484,7 +484,7 @@ jobs:
         uses: crazy-max/ghaction-github-runtime@v3
 
       - name: Build python for amd64
-        run: uv run image-manager build python --snapshot-id "$SNAPSHOT_ID" --platform amd64
+        run: uv run image-manager build python --snapshot-id "$SNAPSHOT_ID" --platform amd64 --no-cache
 
       - name: Generate SBOM for python (amd64)
         run: uv run image-manager sbom python --snapshot-id "$SNAPSHOT_ID"
@@ -537,7 +537,7 @@ jobs:
         uses: crazy-max/ghaction-github-runtime@v3
 
       - name: Build python for arm64
-        run: uv run image-manager build python --snapshot-id "$SNAPSHOT_ID" --platform arm64
+        run: uv run image-manager build python --snapshot-id "$SNAPSHOT_ID" --platform arm64 --no-cache
 
       - name: Generate SBOM for python (arm64)
         run: uv run image-manager sbom python --snapshot-id "$SNAPSHOT_ID"
