@@ -3,6 +3,7 @@
 # Do not edit - regenerate with: image-manager generate-ci
 
 stages:
+  - generate
 {%- for stage in stages %}
   - {{ stage }}
 {%- endfor %}
@@ -41,6 +42,17 @@ variables:
   stage: test
   script:
     - image-manager test ${IMAGE_NAME} --snapshot-id "$SNAPSHOT_ID"{% if not artifacts %} --pull{% endif %}
+
+# === GENERATE ===
+generate:
+  image: registry.example.com/ci/image-manager:latest
+  stage: generate
+  script:
+    - image-manager generate --snapshot-id "$SNAPSHOT_ID"
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 week
 {% for image in images %}
 
 # === {{ image.name | upper }} ===

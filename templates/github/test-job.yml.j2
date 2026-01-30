@@ -5,6 +5,12 @@
       - manifest-{{ image.name }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: generated
+          path: dist/
 {%- if artifacts %}
       - uses: actions/download-artifact@v4
         with:

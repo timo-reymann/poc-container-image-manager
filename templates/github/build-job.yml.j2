@@ -2,14 +2,21 @@
   build-{{ image.name }}-{{ platform }}:
     runs-on: ubuntu-latest
     container: registry.example.com/ci/image-manager:latest
-{%- if image.dependencies %}
     needs:
+      - generate
+{%- if image.dependencies %}
 {%- for dep in image.dependencies %}
       - manifest-{{ dep }}
 {%- endfor %}
 {%- endif %}
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: generated
+          path: dist/
       - run: image-manager build {{ image.name }} --platform {{ platform }} --snapshot-id "$SNAPSHOT_ID"
       - run: image-manager sbom {{ image.name }} --platform {{ platform }} --snapshot-id "$SNAPSHOT_ID"
 {%- if artifacts %}

@@ -4,6 +4,7 @@ manifest-{{ image.name }}:
   variables:
     IMAGE_NAME: {{ image.name }}
   needs:
+    - generate
 {%- for platform in platforms %}
     - build-{{ image.name }}-{{ platform }}
 {%- endfor %}

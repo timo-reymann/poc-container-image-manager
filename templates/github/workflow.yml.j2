@@ -14,6 +14,21 @@ env:
   SNAPSHOT_ID: ${{ "{{" }} github.event.pull_request.number {{ "}}" }}
 
 jobs:
+  # === GENERATE ===
+  generate:
+    runs-on: ubuntu-latest
+    container: registry.example.com/ci/image-manager:latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - run: image-manager generate --snapshot-id "$SNAPSHOT_ID"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: generated
+          path: dist/
+          retention-days: 7
+
 {% for image in images %}
   # === {{ image.name | upper }} ===
 {% include 'build-job.yml.j2' -%}

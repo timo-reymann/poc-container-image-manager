@@ -3,4 +3,5 @@ test-{{ image.name }}:
   variables:
     IMAGE_NAME: {{ image.name }}
   needs:
+    - generate
     - manifest-{{ image.name }}

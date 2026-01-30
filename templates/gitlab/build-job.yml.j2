@@ -5,8 +5,9 @@ build-{{ image.name }}-{{ platform }}:
   variables:
     IMAGE_NAME: {{ image.name }}
     PLATFORM: {{ platform }}
-{%- if image.dependencies %}
   needs:
+    - generate
+{%- if image.dependencies %}
 {%- for dep in image.dependencies %}
     - manifest-{{ dep }}
 {%- endfor %}
