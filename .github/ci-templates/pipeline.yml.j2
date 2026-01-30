@@ -69,9 +69,6 @@ jobs:
         with:
           lfs: true
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Start buildkitd
         run: |
           docker run -d --name buildkitd --privileged \
