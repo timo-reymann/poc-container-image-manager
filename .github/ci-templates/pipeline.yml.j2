@@ -121,7 +121,9 @@ jobs:
         with:
           name: {{ image.name }}-{{ platform }}
           path: |
-            dist/{{ image.name }}/*/linux-{{ platform }}/
+            dist/{{ image.name }}/*/linux-{{ platform }}/image.tar
+            dist/{{ image.name }}/*/linux-{{ platform }}/sbom*.json
+            dist/{{ image.name }}/*/linux-{{ platform }}/sbom-report.html
           retention-days: 7
 {% endfor %}
 
