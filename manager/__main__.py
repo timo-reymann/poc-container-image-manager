@@ -63,6 +63,7 @@ def print_usage() -> None:
     print()
     print("Test options:")
     print("  --platform PLAT     Test specific platform (default: native)")
+    print("  --pull              Pull image from registry instead of loading tar")
     print()
     print("Examples:")
     print("  image-manager generate")
@@ -530,6 +531,7 @@ def cmd_test(args: list[str]) -> int:
     image_refs = []
     snapshot_id = None
     platform = None  # Will default to native
+    pull = False
 
     # Parse options and image refs
     i = 0
@@ -543,6 +545,9 @@ def cmd_test(args: list[str]) -> int:
         elif args[i] == "--platform" and i + 1 < len(args):
             platform = args[i + 1]
             i += 2
+        elif args[i] == "--pull":
+            pull = True
+            i += 1
         elif args[i].startswith("--"):
             print(f"Unknown argument: {args[i]}", file=sys.stderr)
             return 1
@@ -587,7 +592,7 @@ def cmd_test(args: list[str]) -> int:
         print(f"Testing {image_ref}")
         print(f"{'='*60}")
         try:
-            result = run_test(image_ref, config_path, auto_start=False)
+            result = run_test(image_ref, config_path, auto_start=False, pull=pull, snapshot_id=snapshot_id)
             if result != 0:
                 failed.append(image_ref)
         except (RuntimeError, FileNotFoundError, ValueError) as e:

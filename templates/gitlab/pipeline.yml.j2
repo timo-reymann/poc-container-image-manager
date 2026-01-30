@@ -40,7 +40,7 @@ variables:
   image: registry.example.com/ci/image-manager:latest
   stage: test
   script:
-    - image-manager test ${IMAGE_NAME} --snapshot-id "$SNAPSHOT_ID"
+    - image-manager test ${IMAGE_NAME} --snapshot-id "$SNAPSHOT_ID"{% if not artifacts %} --pull{% endif %}
 {% for image in images %}
 
 # === {{ image.name | upper }} ===

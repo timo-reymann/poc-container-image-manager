@@ -247,20 +247,67 @@ def load_image_tar(tar_path: Path) -> bool:
         return False
 
 
+def pull_image(image_ref: str, snapshot_id: str | None = None) -> bool:
+    """Pull an image from the registry into the dind Docker daemon.
+
+    Args:
+        image_ref: Image reference in format 'name:tag'
+        snapshot_id: Optional snapshot ID suffix for the tag
+
+    Returns:
+        True if successful, False otherwise
+    """
+    from manager.config import get_registry_url, get_push_registry
+
+    registry = get_push_registry()
+    name, tag = image_ref.split(":", 1)
+
+    # Apply snapshot suffix if provided
+    if snapshot_id:
+        tag = f"{tag}-{snapshot_id}"
+
+    full_ref = f"{registry.url}/{name}:{tag}"
+    print(f"Pulling image from {full_ref}...")
+
+    try:
+        dind = get_dind_client()
+
+        # Configure auth if available
+        auth_config = None
+        if registry.get_auth():
+            username, password = registry.get_auth()
+            auth_config = {"username": username, "password": password}
+
+        dind.images.pull(f"{registry.url}/{name}", tag=tag, auth_config=auth_config)
+        print(f"Pulled: {full_ref}")
+
+        # Tag as the simple image_ref for container-structure-test
+        dind.images.get(full_ref).tag(name, tag.split("-")[0] if snapshot_id else tag)
+        return True
+    except Exception as e:
+        print(f"Failed to pull image: {e}", file=sys.stderr)
+        return False
+
+
 def run_test(
     image_ref: str,
     config_path: Path | None = None,
     auto_start: bool = True,
+    pull: bool = False,
+    snapshot_id: str | None = None,
 ) -> int:
     """Run container-structure-test for an image.
 
-    Starts dind container if needed, loads the tar archive, then runs tests.
+    Starts dind container if needed, loads the image (from tar or registry),
+    then runs tests.
 
     Args:
         image_ref: Image reference in format 'name:tag'
         config_path: Optional explicit path to test config. If not provided,
                      will be derived from dist/<name>/<tag>/test.yml
         auto_start: If True, automatically start dind if not running
+        pull: If True, pull image from registry instead of loading from tar
+        snapshot_id: Optional snapshot ID for registry pull
 
     Returns:
         Exit code from container-structure-test
@@ -273,11 +320,14 @@ def run_test(
     if config_path is None:
         config_path = find_test_config(image_ref)
 
-    tar_path = find_image_tar(image_ref)
-
-    # Load image into dind Docker
-    if not load_image_tar(tar_path):
-        return 1
+    # Load image into dind Docker (from registry or tar)
+    if pull:
+        if not pull_image(image_ref, snapshot_id):
+            return 1
+    else:
+        tar_path = find_image_tar(image_ref)
+        if not load_image_tar(tar_path):
+            return 1
 
     binary = get_container_structure_test_path()
     docker_host = get_docker_host()

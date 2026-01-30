@@ -11,4 +11,4 @@
           name: {{ image.name }}-manifest
           path: dist/
 {%- endif %}
-      - run: image-manager test {{ image.name }} --snapshot-id "$SNAPSHOT_ID"
+      - run: image-manager test {{ image.name }} --snapshot-id "$SNAPSHOT_ID"{% if not artifacts %} --pull{% endif %}
