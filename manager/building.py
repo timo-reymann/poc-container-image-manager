@@ -23,7 +23,7 @@ DEFAULT_BUILDKIT_DIR = Path(__file__).parent.parent / ".buildkit"
 DEFAULT_SOCKET_PATH = DEFAULT_BUILDKIT_DIR / "buildkitd.sock"
 CONTAINER_NAME = "image-manager-buildkitd"
 CONTAINER_PORT = 8372  # Port for buildkitd on macOS
-BUILDKIT_IMAGE = "moby/buildkit:rootless"
+BUILDKIT_IMAGE = "moby/buildkit:latest"
 
 # Local registry for base image resolution
 REGISTRY_CONTAINER_NAME = "image-manager-registry"
@@ -143,7 +143,7 @@ def is_port_open(port: int, timeout: float = 0.1) -> bool:
 
 
 def start_buildkitd_container() -> int:
-    """Start buildkitd as a rootless Docker container (for macOS)."""
+    """Start buildkitd as a privileged Docker container."""
     if is_container_running():
         print("buildkitd container is already running")
         return 0
@@ -172,23 +172,17 @@ def start_buildkitd_container() -> int:
     config_file = config_dir / "buildkitd.toml"
     config_file.write_text(buildkitd_config)
 
-    print(f"Starting buildkitd container rootless ({BUILDKIT_IMAGE})...")
+    print(f"Starting buildkitd container ({BUILDKIT_IMAGE})...")
     try:
         client.containers.run(
             BUILDKIT_IMAGE,
             name=CONTAINER_NAME,
             detach=True,
-            # Rootless mode - no privileged flag needed
-            security_opt=["seccomp=unconfined", "apparmor=unconfined"],
+            privileged=True,
             ports={f"{CONTAINER_PORT}/tcp": ("127.0.0.1", CONTAINER_PORT)},
             command=[
                 "--addr", f"tcp://0.0.0.0:{CONTAINER_PORT}",
-                "--oci-worker-no-process-sandbox",
-                "--config", "/etc/buildkit/buildkitd.toml",
             ],
-            environment={
-                "BUILDKITD_FLAGS": "--oci-worker-no-process-sandbox",
-            },
             volumes={
                 str(config_file.absolute()): {"bind": "/etc/buildkit/buildkitd.toml", "mode": "ro"},
             },
@@ -213,7 +207,7 @@ def start_buildkitd_container() -> int:
                     timeout=5,
                 )
                 if result.returncode == 0:
-                    print(f"buildkitd container started rootless (addr: {addr})")
+                    print(f"buildkitd container started (addr: {addr})")
                     return 0
             except subprocess.TimeoutExpired:
                 pass
