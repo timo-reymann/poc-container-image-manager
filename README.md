@@ -177,7 +177,7 @@ If no cache config is provided, defaults to local Garage instance at `localhost:
 When running in GitHub Actions without S3 cache configured (or S3 unreachable), BuildKit automatically uses GitHub's native cache API (`type=gha`). This requires no configuration.
 
 **Requirements:**
-- Running in GitHub Actions (detected via `GITHUB_ACTIONS=true`)
+- Running in GitHub Actions (detected via `GITHUB_ACTIONS=true` and `ACTIONS_CACHE_URL`)
 - No S3 cache configured or S3 unreachable
 
 The cache scope is set to `{image}-{platform}` (e.g., `base-linux-amd64`) to enable per-image, per-platform caching.

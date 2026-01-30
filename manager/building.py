@@ -34,8 +34,15 @@ GARAGE_S3_PORT = 3900
 
 
 def is_github_actions() -> bool:
-    """Check if running in GitHub Actions."""
-    return os.environ.get("GITHUB_ACTIONS") == "true"
+    """Check if running in GitHub Actions with cache support.
+
+    Requires both GITHUB_ACTIONS=true and ACTIONS_CACHE_URL to be set.
+    The latter is only available in actual GHA runners.
+    """
+    return (
+        os.environ.get("GITHUB_ACTIONS") == "true"
+        and os.environ.get("ACTIONS_CACHE_URL") is not None
+    )
 
 # Platform support
 SUPPORTED_PLATFORMS = ["linux/amd64", "linux/arm64"]
