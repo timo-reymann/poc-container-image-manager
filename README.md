@@ -172,6 +172,21 @@ cache: false
 
 If no cache config is provided, defaults to local Garage instance at `localhost:3900`.
 
+### GitHub Actions Cache (Automatic)
+
+When running in GitHub Actions without S3 cache configured (or S3 unreachable), BuildKit automatically uses GitHub's native cache API (`type=gha`). This requires no configuration.
+
+**Requirements:**
+- Running in GitHub Actions (detected via `GITHUB_ACTIONS=true`)
+- No S3 cache configured or S3 unreachable
+
+The cache scope is set to `{image}-{platform}` (e.g., `base-linux-amd64`) to enable per-image, per-platform caching.
+
+**Priority order:**
+1. S3 cache (if configured and reachable)
+2. GitHub Actions cache (if in GHA environment)
+3. No cache
+
 ### OCI Image Labels
 
 Built images automatically include [OCI annotations](https://github.com/opencontainers/image-spec/blob/main/annotations.md). Configure global labels in `.image-manager.yml`:

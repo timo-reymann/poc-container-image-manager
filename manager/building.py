@@ -32,6 +32,11 @@ REGISTRY_IMAGE = "registry:2"
 # Garage S3 port for connection checking (local development)
 GARAGE_S3_PORT = 3900
 
+
+def is_github_actions() -> bool:
+    """Check if running in GitHub Actions."""
+    return os.environ.get("GITHUB_ACTIONS") == "true"
+
 # Platform support
 SUPPORTED_PLATFORMS = ["linux/amd64", "linux/arm64"]
 PLATFORM_ALIASES = {
@@ -976,13 +981,22 @@ def run_build_platform(
     if use_cache:
         cache = get_cache_config()
         s3_endpoint = get_cache_endpoint_for_buildkit()
-        if cache and s3_endpoint:
+        if cache and s3_endpoint and check_cache_connection():
+            # S3 cache (preferred)
             cache_name = f"{image_ref.split(':')[0]}-{platform_path}"
             path_style = "true" if cache.use_path_style else "false"
             cache_args = [
                 "--export-cache", f"type=s3,endpoint_url={s3_endpoint},bucket={cache.bucket},region={cache.region},name={cache_name},access_key_id={cache.access_key},secret_access_key={cache.secret_key},use_path_style={path_style},mode=max",
                 "--import-cache", f"type=s3,endpoint_url={s3_endpoint},bucket={cache.bucket},region={cache.region},name={cache_name},access_key_id={cache.access_key},secret_access_key={cache.secret_key},use_path_style={path_style}",
             ]
+        elif is_github_actions():
+            # GitHub Actions cache (automatic fallback)
+            cache_name = f"{image_ref.split(':')[0]}-{platform_path}"
+            cache_args = [
+                "--export-cache", f"type=gha,mode=max,scope={cache_name}",
+                "--import-cache", f"type=gha,scope={cache_name}",
+            ]
+            print(f"Using GitHub Actions cache (scope: {cache_name})")
 
     # Rewrite FROM for local base images
     dockerfile_path = context_path / "Dockerfile"
@@ -1286,10 +1300,6 @@ def run_build(
 
     # Log in to all configured registries (for pulling and pushing)
     login_to_all_registries()
-
-    if use_cache and not check_cache_connection():
-        print("Warning: S3 cache not reachable, building without cache", file=sys.stderr)
-        use_cache = False
 
     # Normalize platforms
     if platforms is None:
