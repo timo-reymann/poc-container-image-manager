@@ -373,12 +373,34 @@ def check_registry_connection() -> bool:
     """Check if the registry is reachable."""
     registry_url = get_registry_url()
 
-    # Parse host and port from URL
-    if ":" in registry_url:
-        host, port_str = registry_url.rsplit(":", 1)
+    # Extract host from URL (may include path like ghcr.io/owner/repo)
+    host = registry_url.split("/")[0]
+
+    # Known cloud registries - skip socket check, they use HTTPS
+    cloud_registries = [
+        "ghcr.io",
+        "docker.io",
+        "registry.hub.docker.com",
+        "gcr.io",
+        "us.gcr.io",
+        "eu.gcr.io",
+        "asia.gcr.io",
+        "azurecr.io",
+        "ecr.aws",
+        "gallery.ecr.aws",
+        "quay.io",
+    ]
+
+    # Check if host matches or ends with a cloud registry
+    for cloud_reg in cloud_registries:
+        if host == cloud_reg or host.endswith(f".{cloud_reg}"):
+            return True
+
+    # Parse host and port for local/private registries
+    if ":" in host:
+        host, port_str = host.rsplit(":", 1)
         port = int(port_str)
     else:
-        host = registry_url
         port = 5000  # Default registry port
 
     try:
