@@ -60,34 +60,13 @@ jobs:
       - generate
 {%- if image.dependencies %}
 {%- for dep in image.dependencies %}
-      - build-{{ dep }}-amd64
+      - test-{{ dep }}
 {%- endfor %}
 {%- endif %}
-    env:
-      BUILDKIT_HOST: tcp://127.0.0.1:8372
     steps:
       - uses: actions/checkout@v4
         with:
           lfs: false
-
-      - name: Start buildkitd
-        run: |
-          docker run -d --name buildkitd --privileged \
-            -p 127.0.0.1:8372:8372 \
-            moby/buildkit:latest \
-            --addr tcp://0.0.0.0:8372
-          # Wait for buildkitd to be ready
-          for i in {1..30}; do
-            if nc -z 127.0.0.1 8372 2>/dev/null; then
-              echo "buildkitd is ready"
-              exit 0
-            fi
-            echo "Waiting for buildkitd... ($i/30)"
-            sleep 1
-          done
-          echo "buildkitd logs:"
-          docker logs buildkitd
-          exit 1
 
       - name: Download generated artifacts
         uses: actions/download-artifact@v4
@@ -119,8 +98,6 @@ jobs:
           bin/linux-amd64/buildkit/buildctl --version
 
       - name: Build {{ image.name }} for amd64
-        env:
-          BUILDKIT_HOST: tcp://127.0.0.1:8372
         run: uv run image-manager build {{ image.name }} --snapshot-id "$SNAPSHOT_ID" --platform amd64
 
       - name: Generate SBOM for {{ image.name }} (amd64)
@@ -145,34 +122,13 @@ jobs:
       - generate
 {%- if image.dependencies %}
 {%- for dep in image.dependencies %}
-      - build-{{ dep }}-arm64
+      - test-{{ dep }}
 {%- endfor %}
 {%- endif %}
-    env:
-      BUILDKIT_HOST: tcp://127.0.0.1:8372
     steps:
       - uses: actions/checkout@v4
         with:
           lfs: false
-
-      - name: Start buildkitd
-        run: |
-          docker run -d --name buildkitd --privileged \
-            -p 127.0.0.1:8372:8372 \
-            moby/buildkit:latest \
-            --addr tcp://0.0.0.0:8372
-          # Wait for buildkitd to be ready
-          for i in {1..30}; do
-            if nc -z 127.0.0.1 8372 2>/dev/null; then
-              echo "buildkitd is ready"
-              exit 0
-            fi
-            echo "Waiting for buildkitd... ($i/30)"
-            sleep 1
-          done
-          echo "buildkitd logs:"
-          docker logs buildkitd
-          exit 1
 
       - name: Download generated artifacts
         uses: actions/download-artifact@v4
@@ -204,8 +160,6 @@ jobs:
           bin/linux-arm64/buildkit/buildctl --version
 
       - name: Build {{ image.name }} for arm64
-        env:
-          BUILDKIT_HOST: tcp://127.0.0.1:8372
         run: uv run image-manager build {{ image.name }} --snapshot-id "$SNAPSHOT_ID" --platform arm64
 
       - name: Generate SBOM for {{ image.name }} (arm64)
