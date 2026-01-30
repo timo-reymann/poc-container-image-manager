@@ -1,7 +1,4 @@
-bin/**/container-structure-test filter=lfs diff=lfs merge=lfs -text
-bin/**/buildkit/* filter=lfs diff=lfs merge=lfs -text
-bin/**/buildkit/buildctl -filter -diff -merge -text
-bin/**/rootlesskit filter=lfs diff=lfs merge=lfs -text
+bin/**/buildkit/buildkitd filter=lfs diff=lfs merge=lfs -text
 
 # Syntax highlighting for Jinja2 templates
 Dockerfile.jinja2 linguist-language=Dockerfile
