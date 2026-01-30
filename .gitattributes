@@ -1,6 +1,4 @@
-bin/**/crane filter=lfs diff=lfs merge=lfs -text
 bin/**/container-structure-test filter=lfs diff=lfs merge=lfs -text
-bin/**/syft filter=lfs diff=lfs merge=lfs -text
 bin/**/buildkit/* filter=lfs diff=lfs merge=lfs -text
 bin/**/rootlesskit filter=lfs diff=lfs merge=lfs -text
 
