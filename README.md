@@ -35,7 +35,7 @@ uv run image-manager <command> [args]
 
 Commands:
 - `generate [--no-lock]` - Generate Dockerfiles and test configs from `images/`
-- `generate-ci [--provider gitlab|github]` - Generate CI pipeline configuration
+- `generate-ci [options]` - Generate CI pipeline configuration
 - `lock <image:tag>` - Generate packages.lock with pinned versions and digest
 - `build [image:tag] [options]` - Build image(s) to `dist/<name>/<tag>/image.tar`
 - `manifest <image:tag>` - Create multi-platform manifest from registry images
@@ -46,6 +46,11 @@ Build options:
   --no-cache          Disable S3 build cache
   --platform PLAT     Build for specific platform only (amd64, arm64)
                       Default: builds linux/amd64 + linux/arm64 with multi-platform manifest
+
+Generate CI options:
+  --provider PROV     Use built-in template (gitlab, github)
+  --template DIR      Use custom template directory
+  --output PATH       Output file path (required with --template)
 
 Manifest options:
   --snapshot-id ID    Use snapshot ID suffix for registry tags
@@ -210,6 +215,82 @@ licenses: "Apache-2.0"  # Overrides global licenses
 | `org.opencontainers.image.documentation` | Global config | Supports `%image%`/`%tag%` placeholders |
 | `org.opencontainers.image.licenses` | Global/image | Image-level overrides global |
 | `org.opencontainers.image.description` | image.yml | Per-image description |
+
+### CI Generation
+
+Generate CI configurations for GitLab, GitHub, or any CI provider using custom templates.
+
+**Built-in providers:**
+```shell
+# GitLab CI (default)
+uv run image-manager generate-ci
+uv run image-manager generate-ci --provider gitlab
+
+# GitHub Actions
+uv run image-manager generate-ci --provider github
+```
+
+**Custom templates:**
+```shell
+# Use custom template directory
+uv run image-manager generate-ci --template ./ci-templates/ --output .circleci/config.yml
+```
+
+Configure default template in `.image-manager.yml`:
+```yaml
+ci:
+  template: ./ci-templates/          # Custom template directory
+  output: .circleci/config.yml       # Output path
+```
+
+**Template directory structure:**
+```
+ci-templates/
+├── pipeline.yml.j2        # Main entry point (required)
+├── build-job.yml.j2       # Optional includes
+└── test-job.yml.j2        # Optional includes
+```
+
+**Example custom template (`pipeline.yml.j2`):**
+```jinja2
+# CircleCI configuration
+version: 2.1
+
+jobs:
+{% for image in images %}
+  build-{{ image.name }}:
+    docker:
+      - image: cimg/base:current
+    steps:
+      - checkout
+      - run: echo "Building {{ image.name }} (tags: {{ image.tags | join(', ') }})"
+{% endfor %}
+
+workflows:
+  build-images:
+    jobs:
+{% for image in images %}
+      - build-{{ image.name }}{% if image.dependencies %}:
+          requires:
+{% for dep in image.dependencies %}
+            - build-{{ dep }}
+{% endfor %}{% endif %}
+
+{% endfor %}
+```
+
+**Available context variables:**
+
+| Variable | Description |
+|----------|-------------|
+| `images` | List of image objects with `name`, `tags`, `dependencies`, `depth` |
+| `platforms` | List of platforms (`["amd64", "arm64"]`) |
+| `stages` | Ordered list of stage names |
+| `generated_at` | ISO timestamp |
+| `config.registry` | Default registry URL |
+| `config.registries` | All configured registries |
+| `config.cache` | Cache configuration (endpoint, bucket, region) |
+| `config.labels` | OCI labels configuration |
 
 ### Image Definition (`image.yml`)
 

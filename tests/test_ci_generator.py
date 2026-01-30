@@ -1,8 +1,9 @@
 # tests/test_ci_generator.py
 import pytest
 from pathlib import Path
-from manager.ci_generator import build_ci_context
+from manager.ci_generator import build_ci_context, build_extended_context, generate_custom_ci
 from manager.models import Image, Tag, Variant
+from manager.config import clear_config_cache
 
 
 def test_build_ci_context_single_image(tmp_path):
@@ -176,3 +177,197 @@ def test_generate_gitlab_ci_with_dependencies(tmp_path):
 
     # Test jobs need manifest
     assert "manifest-python" in config["test-python"]["needs"]
+
+
+def test_build_extended_context(tmp_path):
+    """Test extended context includes config values."""
+    # Create a template file
+    template_file = tmp_path / "Dockerfile.jinja2"
+    template_file.write_text('FROM ubuntu:22.04')
+
+    image = Image(
+        name="base",
+        path=tmp_path,
+        template_path=template_file,
+        versions={},
+        variables={},
+        tags=[Tag(name="2025.09", versions={}, variables={})],
+        variants=[],
+        is_base_image=True,
+        extends=None,
+        aliases={},
+    )
+
+    # Clear config cache to use defaults
+    clear_config_cache()
+
+    context = build_extended_context([image])
+
+    # Should have standard context
+    assert len(context["images"]) == 1
+    assert context["platforms"] == ["amd64", "arm64"]
+    assert "generated_at" in context
+
+    # Should have config section
+    assert "config" in context
+    assert "registry" in context["config"]
+    assert "registries" in context["config"]
+    assert "cache" in context["config"]
+    assert "labels" in context["config"]
+
+
+def test_generate_custom_ci(tmp_path):
+    """Test generating CI from custom template."""
+    # Create a custom template directory
+    template_dir = tmp_path / "templates"
+    template_dir.mkdir()
+
+    # Create main template with extended context usage
+    main_template = template_dir / "pipeline.yml.j2"
+    main_template.write_text("""# Custom CI for {{ images | length }} images
+# Registry: {{ config.registry }}
+{% for image in images %}
+build-{{ image.name }}:
+  image: {{ image.name }}
+  tags: {{ image.tags | join(', ') }}
+{% endfor %}
+""")
+
+    # Create source template file
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    tpl = src_dir / "Dockerfile.jinja2"
+    tpl.write_text("FROM ubuntu:22.04")
+
+    image = Image(
+        name="myimage",
+        path=src_dir,
+        template_path=tpl,
+        tags=[Tag(name="1.0", versions={}, variables={}), Tag(name="2.0", versions={}, variables={})],
+        variants=[],
+        extends=None,
+        versions={},
+        variables={},
+        is_base_image=False,
+        aliases={},
+    )
+
+    # Clear config cache
+    clear_config_cache()
+
+    output_path = tmp_path / "output" / "ci.yml"
+    generate_custom_ci([image], template_dir, output_path)
+
+    assert output_path.exists()
+    content = output_path.read_text()
+    assert "# Custom CI for 1 images" in content
+    assert "Registry: localhost:5050" in content
+    assert "build-myimage:" in content
+    assert "1.0, 2.0" in content
+
+
+def test_generate_custom_ci_with_includes(tmp_path):
+    """Test custom template with includes."""
+    # Create a custom template directory
+    template_dir = tmp_path / "templates"
+    template_dir.mkdir()
+
+    # Create an include file
+    include_file = template_dir / "job.yml.j2"
+    include_file.write_text("""  stage: build
+  script: build.sh""")
+
+    # Create main template that uses include
+    main_template = template_dir / "pipeline.yml.j2"
+    main_template.write_text("""stages:
+  - build
+
+{% for image in images %}
+build-{{ image.name }}:
+{% include 'job.yml.j2' %}
+{% endfor %}
+""")
+
+    # Create source template file
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    tpl = src_dir / "Dockerfile.jinja2"
+    tpl.write_text("FROM ubuntu:22.04")
+
+    image = Image(
+        name="test",
+        path=src_dir,
+        template_path=tpl,
+        tags=[Tag(name="latest", versions={}, variables={})],
+        variants=[],
+        extends=None,
+        versions={},
+        variables={},
+        is_base_image=False,
+        aliases={},
+    )
+
+    clear_config_cache()
+
+    output_path = tmp_path / "ci.yml"
+    generate_custom_ci([image], template_dir, output_path)
+
+    assert output_path.exists()
+    content = output_path.read_text()
+    assert "stages:" in content
+    assert "build-test:" in content
+    assert "stage: build" in content
+    assert "script: build.sh" in content
+
+
+def test_generate_custom_ci_missing_template_dir(tmp_path):
+    """Test error when template directory doesn't exist."""
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    tpl = src_dir / "Dockerfile.jinja2"
+    tpl.write_text("FROM ubuntu:22.04")
+
+    image = Image(
+        name="test",
+        path=src_dir,
+        template_path=tpl,
+        tags=[Tag(name="latest", versions={}, variables={})],
+        variants=[],
+        extends=None,
+        versions={},
+        variables={},
+        is_base_image=False,
+        aliases={},
+    )
+
+    with pytest.raises(FileNotFoundError, match="Template directory not found"):
+        generate_custom_ci([image], tmp_path / "nonexistent", tmp_path / "output.yml")
+
+
+def test_generate_custom_ci_missing_main_template(tmp_path):
+    """Test error when main template is missing."""
+    # Create template dir without main template
+    template_dir = tmp_path / "templates"
+    template_dir.mkdir()
+    (template_dir / "other.yml.j2").write_text("some content")
+
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    tpl = src_dir / "Dockerfile.jinja2"
+    tpl.write_text("FROM ubuntu:22.04")
+
+    image = Image(
+        name="test",
+        path=src_dir,
+        template_path=tpl,
+        tags=[Tag(name="latest", versions={}, variables={})],
+        variants=[],
+        extends=None,
+        versions={},
+        variables={},
+        is_base_image=False,
+        aliases={},
+    )
+
+    with pytest.raises(FileNotFoundError, match="Main template 'pipeline.yml.j2' not found"):
+        generate_custom_ci([image], template_dir, tmp_path / "output.yml")

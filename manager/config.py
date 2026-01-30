@@ -414,6 +414,42 @@ def get_labels_config() -> LabelsConfig:
     )
 
 
+# --- CI Configuration ---
+
+class CIConfig:
+    """Configuration for CI generation."""
+
+    def __init__(
+        self,
+        template: str | None = None,
+        output: str | None = None,
+    ):
+        self.template = template  # Path to custom template directory
+        self.output = output  # Custom output path
+
+
+def get_ci_config() -> CIConfig:
+    """Get CI configuration from .image-manager.yml.
+
+    Configuration format:
+        ci:
+          template: ./ci-templates/     # Custom template directory
+          output: .circleci/config.yml  # Custom output path (optional)
+
+    Returns CIConfig with defaults if not configured.
+    """
+    config = load_config()
+    ci_config = config.get("ci", {})
+
+    if not ci_config or not isinstance(ci_config, dict):
+        return CIConfig()
+
+    return CIConfig(
+        template=expand_env_vars(ci_config.get("template")),
+        output=expand_env_vars(ci_config.get("output")),
+    )
+
+
 class TagConfig(BaseModel):
     """Configuration for a single tag"""
     name: str

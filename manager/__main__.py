@@ -25,7 +25,13 @@ def print_usage() -> None:
     print("  sbom [target]       Generate SBOM for an image (or all images)")
     print("  test [target]       Test an image (or all images if none specified)")
     print()
-    print("  generate-ci         Generate CI configuration (default: gitlab)")
+    print("  generate-ci         Generate CI configuration")
+    print()
+    print("Generate CI options:")
+    print("  --provider PROV     Use built-in template (gitlab, github)")
+    print("  --template DIR      Use custom template directory")
+    print("  --output PATH       Output file path (required for --template)")
+    print("                      --provider and --template are mutually exclusive")
     print()
     print("Target can be:")
     print("  <image>             All tags for image (e.g., 'base', 'dotnet')")
@@ -719,20 +725,52 @@ def cmd_lock(args: list[str]) -> int:
 
 def cmd_generate_ci(args: list[str]) -> int:
     """Generate CI configuration."""
-    from manager.ci_generator import generate_gitlab_ci, generate_github_ci
+    from manager.ci_generator import generate_gitlab_ci, generate_github_ci, generate_custom_ci
+    from manager.config import get_ci_config
 
-    # Parse --provider argument (default: gitlab)
-    provider = "gitlab"
+    # Parse arguments
+    provider = None
+    template_dir = None
+    output_path = None
+
     i = 0
     while i < len(args):
         if args[i] == "--provider" and i + 1 < len(args):
             provider = args[i + 1]
             i += 2
-        else:
+        elif args[i] == "--template" and i + 1 < len(args):
+            template_dir = args[i + 1]
+            i += 2
+        elif args[i] == "--output" and i + 1 < len(args):
+            output_path = args[i + 1]
+            i += 2
+        elif args[i].startswith("--"):
             print(f"Unknown argument: {args[i]}", file=sys.stderr)
             return 1
+        else:
+            print(f"Unexpected argument: {args[i]}", file=sys.stderr)
+            return 1
 
-    if provider not in ("gitlab", "github"):
+    # Load CI config from .image-manager.yml
+    ci_config = get_ci_config()
+
+    # Apply config defaults if not specified via CLI
+    if template_dir is None and ci_config.template:
+        template_dir = ci_config.template
+    if output_path is None and ci_config.output:
+        output_path = ci_config.output
+
+    # Validate mutually exclusive options
+    if provider and template_dir:
+        print("Error: --provider and --template are mutually exclusive", file=sys.stderr)
+        return 1
+
+    # Default to gitlab provider if neither specified
+    if not provider and not template_dir:
+        provider = "gitlab"
+
+    # Validate provider if specified
+    if provider and provider not in ("gitlab", "github"):
         print(f"Unsupported CI provider: {provider}", file=sys.stderr)
         print("Supported providers: gitlab, github", file=sys.stderr)
         return 1
@@ -748,13 +786,25 @@ def cmd_generate_ci(args: list[str]) -> int:
     # Sort by dependencies
     sorted_images = sort_images(all_images)
 
-    # Generate CI based on provider
-    if provider == "gitlab":
-        output_path = Path(".gitlab/ci/images.yml")
-        generate_gitlab_ci(sorted_images, output_path)
+    # Generate CI based on provider or custom template
+    if template_dir:
+        # Custom template
+        if not output_path:
+            print("Error: --output is required when using --template", file=sys.stderr)
+            return 1
+        try:
+            generate_custom_ci(sorted_images, Path(template_dir), Path(output_path))
+        except FileNotFoundError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+    elif provider == "gitlab":
+        final_output = Path(output_path) if output_path else Path(".gitlab/ci/images.yml")
+        generate_gitlab_ci(sorted_images, final_output)
+        output_path = str(final_output)
     else:  # github
-        output_path = Path(".github/workflows/images.yml")
-        generate_github_ci(sorted_images, output_path)
+        final_output = Path(output_path) if output_path else Path(".github/workflows/images.yml")
+        generate_github_ci(sorted_images, final_output)
+        output_path = str(final_output)
 
     print(f"Generated CI configuration: {output_path}")
     return 0

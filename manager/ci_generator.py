@@ -8,6 +8,7 @@ from jinja2 import Environment, FileSystemLoader
 from manager.dependency_graph import extract_dependencies
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
+MAIN_TEMPLATE_NAME = "pipeline.yml.j2"
 
 
 def _calculate_depths(image_names: set[str], dependencies: dict[str, set[str]]) -> dict[str, int]:
@@ -123,6 +124,96 @@ def generate_github_ci(images: list, output_path: Path) -> None:
     template = env.get_template("workflow.yml.j2")
 
     context = build_ci_context(images)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(template.render(**context))
+
+
+def build_extended_context(images: list) -> dict:
+    """Build extended context dictionary for custom CI templates.
+
+    Includes all standard context plus configuration values.
+
+    Args:
+        images: List of Image objects (should be in dependency order)
+
+    Returns:
+        Dictionary with images, platforms, metadata, and config for templates
+    """
+    from manager.config import (
+        get_registry_url,
+        get_registries,
+        get_cache_config,
+        get_labels_config,
+    )
+
+    # Start with standard context
+    context = build_ci_context(images)
+
+    # Add config section with registry, cache, and labels info
+    registries = get_registries()
+    cache_config = get_cache_config()
+    labels_config = get_labels_config()
+
+    context["config"] = {
+        "registry": get_registry_url(),
+        "registries": [
+            {
+                "url": reg.url,
+                "default": reg.default,
+                "insecure": reg.insecure,
+            }
+            for reg in registries
+        ],
+        "cache": {
+            "endpoint": cache_config.endpoint,
+            "bucket": cache_config.bucket,
+            "region": cache_config.region,
+        } if cache_config else None,
+        "labels": {
+            "vendor": labels_config.vendor,
+            "authors": labels_config.authors,
+            "url": labels_config.url,
+            "documentation": labels_config.documentation,
+            "licenses": labels_config.licenses,
+        },
+    }
+
+    return context
+
+
+def generate_custom_ci(images: list, template_dir: Path, output_path: Path) -> None:
+    """Generate CI configuration from a custom template directory.
+
+    The template directory should contain a main template file named 'pipeline.yml.j2'
+    and can include additional templates that can be included using Jinja2's include.
+
+    Args:
+        images: List of Image objects (should be in dependency order)
+        template_dir: Path to directory containing Jinja2 templates
+        output_path: Path to write the generated CI config
+
+    Raises:
+        FileNotFoundError: If template_dir doesn't exist or missing main template
+    """
+    template_dir = Path(template_dir)
+
+    if not template_dir.exists():
+        raise FileNotFoundError(f"Template directory not found: {template_dir}")
+
+    main_template = template_dir / MAIN_TEMPLATE_NAME
+    if not main_template.exists():
+        raise FileNotFoundError(
+            f"Main template '{MAIN_TEMPLATE_NAME}' not found in {template_dir}"
+        )
+
+    env = Environment(
+        loader=FileSystemLoader(template_dir),
+        keep_trailing_newline=True,
+    )
+    template = env.get_template(MAIN_TEMPLATE_NAME)
+
+    context = build_extended_context(images)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(template.render(**context))
