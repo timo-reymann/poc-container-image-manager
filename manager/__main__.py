@@ -31,6 +31,7 @@ def print_usage() -> None:
     print("  --provider PROV     Use built-in template (gitlab, github)")
     print("  --template DIR      Use custom template directory")
     print("  --output PATH       Output file path (required for --template)")
+    print("  --artifacts         Enable artifact passing between jobs (default: off)")
     print("                      --provider and --template are mutually exclusive")
     print()
     print("Target can be:")
@@ -732,6 +733,7 @@ def cmd_generate_ci(args: list[str]) -> int:
     provider = None
     template_dir = None
     output_path = None
+    artifacts = None  # None means use config default
 
     i = 0
     while i < len(args):
@@ -744,6 +746,9 @@ def cmd_generate_ci(args: list[str]) -> int:
         elif args[i] == "--output" and i + 1 < len(args):
             output_path = args[i + 1]
             i += 2
+        elif args[i] == "--artifacts":
+            artifacts = True
+            i += 1
         elif args[i].startswith("--"):
             print(f"Unknown argument: {args[i]}", file=sys.stderr)
             return 1
@@ -759,6 +764,8 @@ def cmd_generate_ci(args: list[str]) -> int:
         template_dir = ci_config.template
     if output_path is None and ci_config.output:
         output_path = ci_config.output
+    if artifacts is None:
+        artifacts = ci_config.artifacts
 
     # Validate mutually exclusive options
     if provider and template_dir:
@@ -793,17 +800,17 @@ def cmd_generate_ci(args: list[str]) -> int:
             print("Error: --output is required when using --template", file=sys.stderr)
             return 1
         try:
-            generate_custom_ci(sorted_images, Path(template_dir), Path(output_path))
+            generate_custom_ci(sorted_images, Path(template_dir), Path(output_path), artifacts=artifacts)
         except FileNotFoundError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
     elif provider == "gitlab":
         final_output = Path(output_path) if output_path else Path(".gitlab/ci/images.yml")
-        generate_gitlab_ci(sorted_images, final_output)
+        generate_gitlab_ci(sorted_images, final_output, artifacts=artifacts)
         output_path = str(final_output)
     else:  # github
         final_output = Path(output_path) if output_path else Path(".github/workflows/images.yml")
-        generate_github_ci(sorted_images, final_output)
+        generate_github_ci(sorted_images, final_output, artifacts=artifacts)
         output_path = str(final_output)
 
     print(f"Generated CI configuration: {output_path}")

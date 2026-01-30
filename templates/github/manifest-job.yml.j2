@@ -7,13 +7,16 @@
 {%- endfor %}
     steps:
       - uses: actions/checkout@v4
+{%- if artifacts %}
 {%- for platform in platforms %}
       - uses: actions/download-artifact@v4
         with:
           name: {{ image.name }}-{{ platform }}
           path: dist/
 {%- endfor %}
+{%- endif %}
       - run: image-manager manifest {{ image.name }} --snapshot-id "$SNAPSHOT_ID"
+{%- if artifacts %}
       - uses: actions/upload-artifact@v4
         with:
           name: {{ image.name }}-manifest
@@ -21,3 +24,4 @@
             dist/{{ image.name }}/*/image.tar
             dist/{{ image.name }}/*/index.html
           retention-days: 7
+{%- endif %}

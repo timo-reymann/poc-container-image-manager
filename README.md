@@ -51,6 +51,7 @@ Generate CI options:
   --provider PROV     Use built-in template (gitlab, github)
   --template DIR      Use custom template directory
   --output PATH       Output file path (required with --template)
+  --artifacts         Enable artifact passing between jobs (opt-in)
 
 Manifest options:
   --snapshot-id ID    Use snapshot ID suffix for registry tags
@@ -236,11 +237,21 @@ uv run image-manager generate-ci --provider github
 uv run image-manager generate-ci --template ./ci-templates/ --output .circleci/config.yml
 ```
 
-Configure default template in `.image-manager.yml`:
+**Artifact passing (opt-in):**
+
+By default, jobs use the registry directly to transfer images between build/manifest/test stages. Use `--artifacts` to enable CI artifact upload/download if you need downloadable build outputs:
+
+```shell
+# Enable artifact passing (can be GB+ in size)
+uv run image-manager generate-ci --provider gitlab --artifacts
+```
+
+Configure in `.image-manager.yml`:
 ```yaml
 ci:
-  template: ./ci-templates/          # Custom template directory
-  output: .circleci/config.yml       # Output path
+  template: ./ci-templates/          # Custom template directory (optional)
+  output: .circleci/config.yml       # Output path (optional)
+  artifacts: true                    # Enable artifact passing (default: false)
 ```
 
 **Template directory structure:**

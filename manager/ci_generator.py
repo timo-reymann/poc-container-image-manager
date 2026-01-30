@@ -43,11 +43,14 @@ def _calculate_depths(image_names: set[str], dependencies: dict[str, set[str]]) 
     return depths
 
 
-def build_ci_context(images: list) -> dict:
+def build_ci_context(images: list, artifacts: bool = False) -> dict:
     """Build context dictionary for CI templates.
 
     Args:
         images: List of Image objects (should be in dependency order)
+        artifacts: Whether to enable artifact passing between jobs (default: False)
+                   When False, jobs use the registry directly for image transfer.
+                   When True, jobs upload/download artifacts (can be GB+ in size).
 
     Returns:
         Dictionary with images, platforms, and metadata for templates
@@ -88,15 +91,17 @@ def build_ci_context(images: list) -> dict:
         "platforms": ["amd64", "arm64"],
         "stages": stages,
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "artifacts": artifacts,
     }
 
 
-def generate_gitlab_ci(images: list, output_path: Path) -> None:
+def generate_gitlab_ci(images: list, output_path: Path, artifacts: bool = False) -> None:
     """Generate GitLab CI configuration file.
 
     Args:
         images: List of Image objects (should be in dependency order)
         output_path: Path to write the generated CI config
+        artifacts: Whether to enable artifact passing between jobs
     """
     env = Environment(
         loader=FileSystemLoader(TEMPLATES_DIR / "gitlab"),
@@ -104,18 +109,19 @@ def generate_gitlab_ci(images: list, output_path: Path) -> None:
     )
     template = env.get_template("pipeline.yml.j2")
 
-    context = build_ci_context(images)
+    context = build_ci_context(images, artifacts=artifacts)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(template.render(**context))
 
 
-def generate_github_ci(images: list, output_path: Path) -> None:
+def generate_github_ci(images: list, output_path: Path, artifacts: bool = False) -> None:
     """Generate GitHub Actions workflow file.
 
     Args:
         images: List of Image objects (should be in dependency order)
         output_path: Path to write the generated workflow
+        artifacts: Whether to enable artifact passing between jobs
     """
     env = Environment(
         loader=FileSystemLoader(TEMPLATES_DIR / "github"),
@@ -123,19 +129,20 @@ def generate_github_ci(images: list, output_path: Path) -> None:
     )
     template = env.get_template("workflow.yml.j2")
 
-    context = build_ci_context(images)
+    context = build_ci_context(images, artifacts=artifacts)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(template.render(**context))
 
 
-def build_extended_context(images: list) -> dict:
+def build_extended_context(images: list, artifacts: bool = False) -> dict:
     """Build extended context dictionary for custom CI templates.
 
     Includes all standard context plus configuration values.
 
     Args:
         images: List of Image objects (should be in dependency order)
+        artifacts: Whether to enable artifact passing between jobs
 
     Returns:
         Dictionary with images, platforms, metadata, and config for templates
@@ -148,7 +155,7 @@ def build_extended_context(images: list) -> dict:
     )
 
     # Start with standard context
-    context = build_ci_context(images)
+    context = build_ci_context(images, artifacts=artifacts)
 
     # Add config section with registry, cache, and labels info
     registries = get_registries()
@@ -182,7 +189,9 @@ def build_extended_context(images: list) -> dict:
     return context
 
 
-def generate_custom_ci(images: list, template_dir: Path, output_path: Path) -> None:
+def generate_custom_ci(
+    images: list, template_dir: Path, output_path: Path, artifacts: bool = False
+) -> None:
     """Generate CI configuration from a custom template directory.
 
     The template directory should contain a main template file named 'pipeline.yml.j2'
@@ -192,6 +201,7 @@ def generate_custom_ci(images: list, template_dir: Path, output_path: Path) -> N
         images: List of Image objects (should be in dependency order)
         template_dir: Path to directory containing Jinja2 templates
         output_path: Path to write the generated CI config
+        artifacts: Whether to enable artifact passing between jobs
 
     Raises:
         FileNotFoundError: If template_dir doesn't exist or missing main template
@@ -213,7 +223,7 @@ def generate_custom_ci(images: list, template_dir: Path, output_path: Path) -> N
     )
     template = env.get_template(MAIN_TEMPLATE_NAME)
 
-    context = build_extended_context(images)
+    context = build_extended_context(images, artifacts=artifacts)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(template.render(**context))

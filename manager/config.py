@@ -423,9 +423,11 @@ class CIConfig:
         self,
         template: str | None = None,
         output: str | None = None,
+        artifacts: bool = False,
     ):
         self.template = template  # Path to custom template directory
         self.output = output  # Custom output path
+        self.artifacts = artifacts  # Enable artifact passing between jobs
 
 
 def get_ci_config() -> CIConfig:
@@ -435,6 +437,7 @@ def get_ci_config() -> CIConfig:
         ci:
           template: ./ci-templates/     # Custom template directory
           output: .circleci/config.yml  # Custom output path (optional)
+          artifacts: true               # Enable artifact passing (default: false)
 
     Returns CIConfig with defaults if not configured.
     """
@@ -447,6 +450,7 @@ def get_ci_config() -> CIConfig:
     return CIConfig(
         template=expand_env_vars(ci_config.get("template")),
         output=expand_env_vars(ci_config.get("output")),
+        artifacts=ci_config.get("artifacts", False),
     )
 
 
