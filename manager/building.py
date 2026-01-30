@@ -143,7 +143,11 @@ def is_port_open(port: int, timeout: float = 0.1) -> bool:
 
 
 def start_buildkitd_container() -> int:
-    """Start buildkitd as a privileged Docker container."""
+    """Start buildkitd as a Docker container.
+
+    By default uses privileged mode. Set BUILDKIT_ROOTLESS=1 to use
+    rootless mode (requires kernel support for unprivileged user namespaces).
+    """
     if is_container_running():
         print("buildkitd container is already running")
         return 0
@@ -172,24 +176,52 @@ def start_buildkitd_container() -> int:
     config_file = config_dir / "buildkitd.toml"
     config_file.write_text(buildkitd_config)
 
-    print(f"Starting buildkitd container ({BUILDKIT_IMAGE})...")
-    try:
-        client.containers.run(
-            BUILDKIT_IMAGE,
-            name=CONTAINER_NAME,
-            detach=True,
-            privileged=True,
-            ports={f"{CONTAINER_PORT}/tcp": ("127.0.0.1", CONTAINER_PORT)},
-            command=[
-                "--addr", f"tcp://0.0.0.0:{CONTAINER_PORT}",
-            ],
-            volumes={
-                str(config_file.absolute()): {"bind": "/etc/buildkit/buildkitd.toml", "mode": "ro"},
-            },
-        )
-    except APIError as e:
-        print(f"Failed to start buildkitd container: {e}", file=sys.stderr)
-        return 1
+    # Check if user wants rootless mode
+    use_rootless = os.environ.get("BUILDKIT_ROOTLESS", "").lower() in ("1", "true", "yes")
+
+    if use_rootless:
+        image = "moby/buildkit:rootless"
+        print(f"Starting buildkitd container in rootless mode ({image})...")
+        try:
+            client.containers.run(
+                image,
+                name=CONTAINER_NAME,
+                detach=True,
+                security_opt=["seccomp=unconfined", "apparmor=unconfined"],
+                ports={f"{CONTAINER_PORT}/tcp": ("127.0.0.1", CONTAINER_PORT)},
+                command=[
+                    "--addr", f"tcp://0.0.0.0:{CONTAINER_PORT}",
+                    "--oci-worker-no-process-sandbox",
+                ],
+                volumes={
+                    str(config_file.absolute()): {"bind": "/etc/buildkit/buildkitd.toml", "mode": "ro"},
+                },
+            )
+        except APIError as e:
+            print(f"Failed to start buildkitd container: {e}", file=sys.stderr)
+            print("Hint: rootless mode requires kernel support for unprivileged user namespaces.", file=sys.stderr)
+            print("Try without BUILDKIT_ROOTLESS or configure AppArmor to allow it.", file=sys.stderr)
+            return 1
+    else:
+        image = BUILDKIT_IMAGE
+        print(f"Starting buildkitd container ({image})...")
+        try:
+            client.containers.run(
+                image,
+                name=CONTAINER_NAME,
+                detach=True,
+                privileged=True,
+                ports={f"{CONTAINER_PORT}/tcp": ("127.0.0.1", CONTAINER_PORT)},
+                command=[
+                    "--addr", f"tcp://0.0.0.0:{CONTAINER_PORT}",
+                ],
+                volumes={
+                    str(config_file.absolute()): {"bind": "/etc/buildkit/buildkitd.toml", "mode": "ro"},
+                },
+            )
+        except APIError as e:
+            print(f"Failed to start buildkitd container: {e}", file=sys.stderr)
+            return 1
 
     # Wait for buildkitd to be fully ready
     print("Waiting for buildkitd to be ready...")
